@@ -1,0 +1,4 @@
+# Python dependencies
+# Data engineering
+pandas==2.*
+numpy==1.*
