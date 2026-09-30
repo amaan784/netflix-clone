@@ -1,50 +1,31 @@
 #!/usr/bin/env python
-"""Launcher: build the warehouse if needed, then demo the recommender and assistant."""
-import sqlite3
+"""
+Launcher for the Netflix clone.
+
+  python run.py            # build DB if needed, then start the API
+  python run.py --rebuild  # force-rebuild the data warehouse, then start
+  python run.py --etl      # run the ETL pipeline only (no server)
+"""
+import sys
 
 from paths import DB_PATH
 
 
-def ensure_db():
-    need = True
-    if DB_PATH.exists():
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            need = conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0] == 0
-            conn.close()
-        except sqlite3.Error:
-            need = True
-    if need:
+def main():
+    args = set(sys.argv[1:])
+
+    if "--rebuild" in args or "--etl" in args:
         from data_engineering.pipeline import run_pipeline
         run_pipeline()
+        if "--etl" in args:
+            print("\nETL complete. Database at:", DB_PATH)
+            return
 
-
-def main():
-    ensure_db()
-    from ai.recommender import RecommenderService
-    from ai.assistant import AIConcierge
-
-    svc = RecommenderService().fit()
-    demo = svc.frames["profiles"].query("is_synthetic == 0")
-    pid = int(demo.iloc[0]["profile_id"])
-    name = demo.iloc[0]["profile_name"]
-
-    print(f"\n=== Top picks for '{name}' ===")
-    for i in svc.recommend_for_profile(pid, 8):
-        print(f"  {i['title']:<28} score={i['score']:.3f}  {i['genres']}")
-
-    bb = next(t for t in svc.title_lookup.values() if t["title"] == "Breaking Bad")
-    print("\n=== More like Breaking Bad ===")
-    print("  ", [t["title"] for t in svc.more_like_this(bb["title_id"], 6)])
-
-    print("\n=== Search: 'scary supernatural small town' ===")
-    print("  ", [t["title"] for t in svc.search("scary supernatural small town", 6)])
-
-    print("\n=== Assistant ===")
-    ai = AIConcierge(svc)
-    for q in ["recommend something", "something funny", "more like Breaking Bad"]:
-        r = ai.ask(pid, q)
-        print(f"  {q!r:26} -> {r['intent']}: {r['reply']}")
+    import uvicorn
+    print("=" * 60)
+    print(" NetClone is starting...  ->  http://127.0.0.1:8000/docs")
+    print("=" * 60)
+    uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=False)
 
 
 if __name__ == "__main__":

@@ -1,4 +1,11 @@
 # Python dependencies
+# Web framework
+fastapi==0.115.*
+uvicorn[standard]==0.30.*
+pydantic==2.*
+jinja2==3.*
+python-multipart==0.0.*
+
 # Data engineering / AI
 pandas==2.*
 numpy==1.*
