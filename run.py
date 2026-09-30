@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Launcher: build the warehouse if needed, then demo the recommender."""
+"""Launcher: build the warehouse if needed, then demo the recommender and assistant."""
 import sqlite3
 
 from paths import DB_PATH
@@ -22,6 +22,7 @@ def ensure_db():
 def main():
     ensure_db()
     from ai.recommender import RecommenderService
+    from ai.assistant import AIConcierge
 
     svc = RecommenderService().fit()
     demo = svc.frames["profiles"].query("is_synthetic == 0")
@@ -38,6 +39,12 @@ def main():
 
     print("\n=== Search: 'scary supernatural small town' ===")
     print("  ", [t["title"] for t in svc.search("scary supernatural small town", 6)])
+
+    print("\n=== Assistant ===")
+    ai = AIConcierge(svc)
+    for q in ["recommend something", "something funny", "more like Breaking Bad"]:
+        r = ai.ask(pid, q)
+        print(f"  {q!r:26} -> {r['intent']}: {r['reply']}")
 
 
 if __name__ == "__main__":
