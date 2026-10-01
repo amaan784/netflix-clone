@@ -2,7 +2,7 @@
 """
 Launcher for the Netflix clone.
 
-  python run.py            # build DB if needed, then start the API
+  python run.py            # build DB if needed, then start the web server
   python run.py --rebuild  # force-rebuild the data warehouse, then start
   python run.py --etl      # run the ETL pipeline only (no server)
 """
@@ -23,7 +23,7 @@ def main():
 
     import uvicorn
     print("=" * 60)
-    print(" NetClone is starting...  ->  http://127.0.0.1:8000/docs")
+    print(" NetClone is starting...  ->  http://127.0.0.1:8000")
     print("=" * 60)
     uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=False)
 

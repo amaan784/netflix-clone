@@ -1,4 +1,4 @@
-"""FastAPI JSON API. Interactive docs at /docs.
+"""FastAPI app serving the frontend and JSON API.
 
 Run:  python -m backend.main      (or)      python run.py
 """
@@ -8,10 +8,11 @@ import sqlite3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import Response
+from fastapi.responses import FileResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from paths import DB_PATH
+from paths import DB_PATH, FRONTEND_DIR
 from backend import store
 from backend.poster import poster_svg
 
@@ -238,9 +239,18 @@ def poster(title_id: int, w: int = 300, h: int = 450):
                     headers={"Cache-Control": "public, max-age=86400"})
 
 
+# frontend, mounted last so /api/* wins
+@app.get("/")
+def index():
+    return FileResponse(FRONTEND_DIR / "index.html")
+
+
 @app.get("/health")
 def health():
     return {"status": "ok", "models_ready": _svc is not None and _svc.ready}
+
+
+app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":

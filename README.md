@@ -1,19 +1,15 @@
-# NetClone v4: REST API
+# NetClone v5: Web frontend
 
-Puts the models behind a FastAPI app. There's no UI yet; use the generated docs
-page to try the endpoints.
+Adds the Netflix-style frontend and has the API serve it. This is the first
+version you can click through.
 
-## New in this stage (`backend/`)
+## New in this stage
 
-- `main.py` - profiles, home rows, title detail, catalog, genres, search,
-  recommendations, assistant, watch/rate, My List, analytics, posters.
-- `store.py` - writes watch events, ratings and My List entries to the
-  warehouse.
-- `poster.py` - draws an SVG poster for each title, so no image files are
-  needed.
-
-Watch and rate calls write straight to the database and update the
-recommender's in-memory state, so recommendations react right away.
+- `frontend/` - a single-page app in plain JavaScript with no build step:
+  profile picker, hero banner, content rows, title detail modal, a mock player
+  that records watch progress, live search, the assistant panel, and an
+  analytics page.
+- `backend/main.py` now serves `index.html` and the static files.
 
 ## Run
 
@@ -22,4 +18,4 @@ pip install -r requirements.txt
 python run.py
 ```
 
-Then open http://127.0.0.1:8000/docs.
+Open http://127.0.0.1:8000 and pick a profile.
