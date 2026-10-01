@@ -331,6 +331,35 @@ async function loadAnalytics() {
   barChart("#chart-device", d.watch_hours_by_device.map(r => [r.device, r.watch_hours]));
   barChart("#chart-rating", d.rating_distribution.map(r => [r.rating + " ★", r.n]));
   barChart("#chart-daily", d.daily_engagement.slice(-14).map(r => [r.cal_date.slice(5), r.active_profiles]));
+
+  loadStreaming();
+}
+
+async function loadStreaming() {
+  try {
+    const st = await API.get("/api/streaming/stats");
+    $("#streaming-kpis").innerHTML = [
+      ["Backend", st.backend === "kafka" ? "Apache Kafka" : "Log broker"],
+      ["Events processed", st.processed],
+      ["Watch events", st.watch_events],
+      ["Rating events", st.rating_events],
+      ["Consumer lag", st.lag],
+      ["Events / min", st.events_per_min],
+      ["Consumer group", st.consumer_group],
+    ].map(([l, v]) => `<div class="kpi"><div class="v">${v}</div><div class="l">${l}</div></div>`).join("");
+    barChart("#stream-topics", st.broker.topics.map(t => [`${t.topic} (${t.partitions}p)`, t.total_messages]));
+
+    const tr = await API.get("/api/streaming/trending?k=8");
+    const tops = tr.items;
+    $("#stream-trending").innerHTML = tops.length
+      ? (() => { const max = tops[0].score || 1; return tops.map((it, i) => `
+          <div class="bar-row">
+            <div class="bl">#${i + 1} ${it.title}</div>
+            <div class="bt"><div class="bf" style="width:${(it.score / max) * 100}%"></div></div>
+            <div class="bv">${it.score.toFixed(1)}</div>
+          </div>`).join(""); })()
+      : '<div class="empty" style="padding:8px 0;font-size:14px">No live events yet. Play or rate something, then reopen Analytics.</div>';
+  } catch (e) { /* streaming optional */ }
 }
 function barChart(sel, rows, suffix = "") {
   const max = Math.max(...rows.map(r => r[1]), 1);

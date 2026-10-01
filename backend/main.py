@@ -15,11 +15,15 @@ from pydantic import BaseModel
 from paths import DB_PATH, FRONTEND_DIR
 from backend import store
 from backend.poster import poster_svg
+from streaming.topics import WATCH_EVENTS, RATINGS
 
 
 # lazily-initialised singletons
 _svc = None
 _concierge = None
+_producer = None
+_processor = None
+_backend = None
 
 
 def _ensure_db():
@@ -54,10 +58,43 @@ def concierge():
     return _concierge
 
 
+def streaming():
+    """Lazily start the log broker, its producer, and the consumer that sinks
+    events into the warehouse and updates live recommender state."""
+    global _producer, _processor, _backend
+    if _processor is None:
+        from streaming.backends import get_stream_backend
+        from streaming.pipeline import StreamProcessor
+        from streaming.topics import WATCH_EVENTS as W, RATINGS as R, SINK_GROUP
+        _backend = get_stream_backend()
+        _producer = _backend.producer
+        consumer = _backend.make_consumer(SINK_GROUP, [W, R])
+        s = svc()
+
+        def on_watch(v):
+            store.record_watch(v["profile_id"], v["title_id"],
+                               v.get("watch_seconds", 0), v.get("completion", 0.0),
+                               v.get("device", "Web"))
+            s.add_interaction(v["profile_id"], v["title_id"],
+                              completion=float(v.get("completion", 0.0)))
+
+        def on_rating(v):
+            store.record_rating(v["profile_id"], v["title_id"], v["rating"])
+            s.add_interaction(v["profile_id"], v["title_id"], rating=int(v["rating"]))
+
+        _processor = StreamProcessor(consumer, _backend.stats,
+                                     on_watch=on_watch, on_rating=on_rating)
+        _processor.start()
+    return _producer, _processor
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    svc()  # warm the models so the first request is fast
+    svc()        # warm the models so the first request is fast
+    streaming()  # start the event-streaming consumer
     yield
+    if _processor is not None:
+        _processor.stop()
 
 
 app = FastAPI(title="Netflix Clone API", version="1.0.0", lifespan=_lifespan)
@@ -179,20 +216,24 @@ def recommendations(profile_id: int = Query(...), k: int = 24):
     return {"items": svc().recommend_for_profile(profile_id, k=k)}
 
 
-# writes
+# writes: published to the event stream; the consumer sinks them to the warehouse
 @app.post("/api/watch")
 def watch(body: WatchBody):
-    res = store.record_watch(body.profile_id, body.title_id,
-                             body.watch_seconds, body.completion, body.device)
-    svc().add_interaction(body.profile_id, body.title_id, completion=res["completion"])
-    return {"ok": True, **res}
+    producer, _ = streaming()
+    ack = producer.send(WATCH_EVENTS, {
+        "profile_id": body.profile_id, "title_id": body.title_id,
+        "watch_seconds": body.watch_seconds, "completion": body.completion,
+        "device": body.device}, key=body.profile_id)
+    return {"ok": True, "streamed": True, **ack}
 
 
 @app.post("/api/rate")
 def rate(body: RateBody):
-    res = store.record_rating(body.profile_id, body.title_id, body.rating)
-    svc().add_interaction(body.profile_id, body.title_id, rating=res["rating"])
-    return {"ok": True, **res}
+    producer, _ = streaming()
+    ack = producer.send(RATINGS, {
+        "profile_id": body.profile_id, "title_id": body.title_id,
+        "rating": body.rating}, key=body.profile_id)
+    return {"ok": True, "streamed": True, **ack}
 
 
 @app.get("/api/mylist")
@@ -218,6 +259,22 @@ def mylist_remove(body: ListBody):
 @app.get("/api/analytics")
 def analytics():
     return store.get_analytics()
+
+
+# event-streaming pipeline
+@app.get("/api/streaming/stats")
+def streaming_stats():
+    _, proc = streaming()
+    st = proc.stats()
+    st["backend"] = _backend.kind if _backend else "log"
+    return st
+
+
+@app.get("/api/streaming/trending")
+def streaming_trending(k: int = 10):
+    s = svc()
+    _, proc = streaming()
+    return {"items": s.hydrate(proc.trending.top(k))}
 
 
 # admin / ops
