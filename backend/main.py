@@ -278,6 +278,20 @@ def streaming_trending(k: int = 10):
     return {"items": s.hydrate(proc.trending.top(k))}
 
 
+# offline recommender evaluation
+@app.get("/api/eval")
+def eval_models(k: int = 10, strategy: str = "last_n", include_kids: bool = True,
+                grid: bool = False):
+    from ai import evaluation
+    svc()  # ensure the warehouse exists
+    res = evaluation.run_evaluation(ks=(5, k, 20), strategy=strategy,
+                                    include_kids=include_kids)
+    if grid:
+        res["grid_search"] = evaluation.grid_search_hybrid(
+            metric=f"ndcg@{k}", strategy=strategy, include_kids=include_kids)
+    return res
+
+
 # admin / ops
 @app.post("/api/admin/refresh")
 def refresh():

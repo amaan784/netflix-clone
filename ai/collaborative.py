@@ -82,3 +82,71 @@ class CollaborativeModel:
                 break
         return out
 
+
+class ALSModel:
+    """Implicit-feedback ALS (Hu, Koren & Volinsky 2008), plain numpy.
+    Confidence c = 1 + alpha*r over binary preference p = (r > 0)."""
+
+    def __init__(self, n_factors: int = 32, alpha: float = 20.0,
+                 reg: float = 0.1, n_iters: int = 15, seed: int = 42):
+        self.f = n_factors
+        self.alpha = alpha
+        self.reg = reg
+        self.n_iters = n_iters
+        self.seed = seed
+        self.X = None          # users x f
+        self.Y = None          # items x f
+        self.profile_ids: list[int] = []
+        self.title_ids: list[int] = []
+        self.p_index: dict[int, int] = {}
+        self.t_index: dict[int, int] = {}
+
+    def fit(self, interactions: pd.DataFrame, title_ids: list[int]):
+        self.profile_ids = sorted(interactions["profile_id"].unique().tolist())
+        self.title_ids = list(title_ids)
+        self.p_index = {p: i for i, p in enumerate(self.profile_ids)}
+        self.t_index = {t: i for i, t in enumerate(self.title_ids)}
+        m, n = len(self.profile_ids), len(self.title_ids)
+
+        R = np.zeros((m, n), dtype=np.float64)
+        rows = interactions["profile_id"].map(self.p_index).to_numpy()
+        cols = interactions["title_id"].map(self.t_index)
+        mask = cols.notna().to_numpy()
+        R[rows[mask].astype(int), cols[mask].astype(int).to_numpy()] = \
+            interactions["affinity"].to_numpy(dtype=float)[mask]
+
+        C = 1.0 + self.alpha * R              # confidence
+        P = (R > 0).astype(np.float64)        # preference
+
+        rng = np.random.default_rng(self.seed)
+        self.X = 0.01 * rng.standard_normal((m, self.f))
+        self.Y = 0.01 * rng.standard_normal((n, self.f))
+        lam_i = self.reg * np.eye(self.f)
+
+        for _ in range(self.n_iters):
+            YtY = self.Y.T @ self.Y
+            for u in range(m):
+                cu = C[u]
+                A = YtY + self.Y.T @ ((cu - 1.0)[:, None] * self.Y) + lam_i
+                b = self.Y.T @ (cu * P[u])
+                self.X[u] = self._solve(A, b)
+            XtX = self.X.T @ self.X
+            for i in range(n):
+                ci = C[:, i]
+                A = XtX + self.X.T @ ((ci - 1.0)[:, None] * self.X) + lam_i
+                b = self.X.T @ (ci * P[:, i])
+                self.Y[i] = self._solve(A, b)
+        return self
+
+    @staticmethod
+    def _solve(A, b):
+        try:
+            return np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return np.linalg.lstsq(A, b, rcond=None)[0]
+
+    def predict_scores(self, profile_id: int) -> dict[int, float]:
+        if profile_id not in self.p_index or self.X is None:
+            return {}
+        s = self.Y @ self.X[self.p_index[profile_id]]
+        return {self.title_ids[j]: float(s[j]) for j in range(len(self.title_ids))}

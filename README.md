@@ -1,33 +1,22 @@
-# NetClone v7: Kafka backend
+# NetClone v8: Offline evaluation
 
-Adds a real Apache Kafka backend as an alternative to the in-process log. The
-app code doesn't change: `backends.py` uses Kafka when `KAFKA_BOOTSTRAP`
-points at a reachable broker and falls back to the log broker otherwise, so
-the app always starts.
+Adds a way to measure the recommender rather than eyeball it.
+`ai/evaluation.py` holds out some positive interactions per profile, retrains
+every model on the rest, and scores how well each one ranks the held-out
+titles: Precision@K, Recall@K, NDCG@K, MAP@K, hit rate and catalog coverage.
+Popularity, content-based, item-item, SVD, ALS and the hybrid all run on the
+same split. A grid search over the blend weights is included.
 
-## New in this stage
-
-- `streaming/kafka_backend.py` - producer, consumer and stats on kafka-python,
-  with the same interface as the log broker. Creates the topics if needed.
-- `streaming/backends.py` - picks the backend.
-- `docker-compose.yml` - single-node Kafka (KRaft, no Zookeeper) on
-  localhost:9092.
-- `run.py --kafka` - sets `KAFKA_BOOTSTRAP=localhost:9092`.
+This stage also adds an implicit-feedback ALS model (`ALSModel` in
+`collaborative.py`) as a candidate. It scored slightly below SVD, so it's
+benchmarked here but not used in the live blend.
 
 ## Run
 
-Without Kafka, same as before:
-
 ```powershell
 pip install -r requirements.txt
-python run.py
+python -m ai.evaluation           # comparison table at K=10
+python -m ai.evaluation --grid    # also search the blend weights
 ```
 
-With Kafka (needs Docker):
-
-```powershell
-docker compose up -d
-python run.py --kafka
-```
-
-The Analytics page shows which backend is in use.
+The running app serves the same numbers at `GET /api/eval`.
