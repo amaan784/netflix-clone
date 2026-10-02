@@ -59,8 +59,9 @@ def concierge():
 
 
 def streaming():
-    """Lazily start the log broker, its producer, and the consumer that sinks
-    events into the warehouse and updates live recommender state."""
+    """Lazily start the streaming backend (Kafka if reachable, else the
+    in-process log), its producer, and the consumer that sinks events into the
+    warehouse and updates live recommender state."""
     global _producer, _processor, _backend
     if _processor is None:
         from streaming.backends import get_stream_backend

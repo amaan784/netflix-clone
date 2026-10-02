@@ -10,3 +10,8 @@ python-multipart==0.0.*
 pandas==2.*
 numpy==1.*
 scikit-learn==1.*
+
+# Streaming (only needed for the real-Kafka backend; the offline log broker
+# uses the standard library). Set KAFKA_BOOTSTRAP to enable it.
+kafka-python-ng==2.2.*
+

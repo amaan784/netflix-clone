@@ -1,30 +1,33 @@
-# NetClone v6: Event streaming
+# NetClone v7: Kafka backend
 
-Watch and rating actions no longer write to the database directly. The API
-publishes them to an append-only log, and a background consumer writes them to
-the warehouse, updates the recommender and keeps a live trending count.
+Adds a real Apache Kafka backend as an alternative to the in-process log. The
+app code doesn't change: `backends.py` uses Kafka when `KAFKA_BOOTSTRAP`
+points at a reachable broker and falls back to the log broker otherwise, so
+the app always starts.
 
-The log is a small in-process broker modelled on Kafka: topics split into
-partitions, records keyed by profile, offsets committed per consumer group,
-and each partition saved to a `.log` file so it survives restarts.
+## New in this stage
 
-## New in this stage (`streaming/`)
-
-- `broker.py` - the log itself.
-- `producer.py`, `consumer.py` - publish; poll and commit.
-- `topics.py` - `watch-events` (3 partitions) and `ratings` (2).
-- `pipeline.py` - the consumer loop, the warehouse sink and live trending.
-- `backends.py` - gives the app a producer and consumers.
-
-The Analytics page gets a streaming panel (message counts, consumer lag,
-throughput, live trending), backed by `/api/streaming/stats` and
-`/api/streaming/trending`.
+- `streaming/kafka_backend.py` - producer, consumer and stats on kafka-python,
+  with the same interface as the log broker. Creates the topics if needed.
+- `streaming/backends.py` - picks the backend.
+- `docker-compose.yml` - single-node Kafka (KRaft, no Zookeeper) on
+  localhost:9092.
+- `run.py --kafka` - sets `KAFKA_BOOTSTRAP=localhost:9092`.
 
 ## Run
+
+Without Kafka, same as before:
 
 ```powershell
 pip install -r requirements.txt
 python run.py
 ```
 
-To watch the broker on its own: `python -m streaming.pipeline`.
+With Kafka (needs Docker):
+
+```powershell
+docker compose up -d
+python run.py --kafka
+```
+
+The Analytics page shows which backend is in use.
