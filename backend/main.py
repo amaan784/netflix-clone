@@ -151,10 +151,40 @@ def get_genres():
 def get_home(profile_id: int = Query(...)):
     s = svc()
     rows = s.home_rows(profile_id)
+    top_extra = []
+
+    # Continue Watching: started-but-unfinished titles, with resume %
+    cw_items = []
+    for e in store.get_continue_watching(profile_id):
+        rec = s.get_title(e["title_id"])
+        if rec:
+            item = dict(rec)
+            item["progress"] = e["progress"]
+            cw_items.append(item)
+    if cw_items:
+        top_extra.append({"title": "Continue Watching", "kind": "continue", "items": cw_items})
+
     my_list = store.get_list(profile_id)
     if my_list:
         items = [s.get_title(t) for t in my_list if s.get_title(t)]
-        rows.insert(1, {"title": "My List", "kind": "mylist", "items": items})
+        if items:
+            top_extra.append({"title": "My List", "kind": "mylist", "items": items})
+
+    rows = top_extra + rows
+
+    # Top 10 in the profile's country
+    country = store.get_profile_country(profile_id)
+    if country:
+        allow = s._allowed_for_profile(profile_id)
+        c_items = []
+        for r in store.get_top_in_country(country, 10):
+            rec = s.get_title(r["title_id"])
+            if rec and allow(rec):
+                c_items.append(dict(rec))
+        if c_items:
+            rows.append({"title": f"Top 10 in {country} Today", "kind": "country",
+                         "items": c_items})
+
     return {"profile_id": profile_id, "rows": rows}
 
 

@@ -1,22 +1,17 @@
-# NetClone v8: Offline evaluation
+# NetClone v9: Recommendation quality
 
-Adds a way to measure the recommender rather than eyeball it.
-`ai/evaluation.py` holds out some positive interactions per profile, retrains
-every model on the rest, and scores how well each one ranks the held-out
-titles: Precision@K, Recall@K, NDCG@K, MAP@K, hit rate and catalog coverage.
-Popularity, content-based, item-item, SVD, ALS and the hybrid all run on the
-same split. A grid search over the blend weights is included.
+Three changes to what users see:
 
-This stage also adds an implicit-feedback ALS model (`ALSModel` in
-`collaborative.py`) as a candidate. It scored slightly below SVD, so it's
-benchmarked here but not used in the live blend.
+- Top Picks is re-ranked with maximal marginal relevance, giving up a little
+  relevance for variety so the row isn't all one genre (`recommender.py`).
+- A Continue Watching row lists titles that were started but not finished,
+  with a progress bar (`store.py`, `main.py`, frontend).
+- A Top 10 row ranks what viewers in the profile's country watch most
+  (`analytics.py`, `store.py`, `main.py`).
 
 ## Run
 
 ```powershell
 pip install -r requirements.txt
-python -m ai.evaluation           # comparison table at K=10
-python -m ai.evaluation --grid    # also search the blend weights
+python run.py
 ```
-
-The running app serves the same numbers at `GET /api/eval`.

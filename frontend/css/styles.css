@@ -144,6 +144,9 @@ a { cursor: pointer; }
 .card-hover .ch-title { font-size: 13px; font-weight: 700; }
 .card-hover .ch-meta { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-reason { padding: 0 4vw; color: var(--muted); font-size: 12px; margin-top: -4px; }
+.card-progress { position: absolute; left: 8px; right: 8px; bottom: 6px; height: 4px;
+  background: rgba(255,255,255,.3); border-radius: 2px; overflow: hidden; }
+.card-progress-fill { height: 100%; background: var(--red); }
 
 /* grid */
 .grid {

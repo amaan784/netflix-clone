@@ -92,6 +92,18 @@ def content_type_split(conn):
         GROUP BY t.content_type""")
 
 
+def top_in_country(conn, country, limit=10):
+    """Most-watched titles among viewers in a given country."""
+    return _rows(conn, """
+        SELECT t.title_id, t.title, COUNT(*) AS views
+        FROM fact_watch_event f
+        JOIN dim_profile p ON f.profile_id = p.profile_id
+        JOIN dim_user u ON p.user_id = u.user_id
+        JOIN dim_title t ON f.title_id = t.title_id
+        WHERE u.country = ?
+        GROUP BY t.title_id ORDER BY views DESC LIMIT ?""", (country, limit))
+
+
 def dashboard(conn: sqlite3.Connection) -> dict:
     """Bundle everything the analytics page needs in one payload."""
     return {

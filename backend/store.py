@@ -96,6 +96,51 @@ def get_list(profile_id: int) -> list[int]:
         conn.close()
 
 
+def get_continue_watching(profile_id: int, limit: int = 18) -> list[dict]:
+    """Titles the profile started but didn't finish, most recent first.
+
+    Uses the latest watch event per title; keeps it if the latest completion is
+    between 5% and 90% (started, not finished). Returns title_id + resume pct.
+    """
+    conn = _conn()
+    try:
+        rows = conn.execute(
+            "SELECT title_id, completion FROM fact_watch_event "
+            "WHERE profile_id=? ORDER BY event_ts DESC", (profile_id,)).fetchall()
+    finally:
+        conn.close()
+    out, seen = [], set()
+    for title_id, completion in rows:
+        if title_id in seen:
+            continue
+        seen.add(title_id)
+        if 0.05 < completion < 0.9:
+            out.append({"title_id": title_id, "progress": round(completion * 100)})
+        if len(out) >= limit:
+            break
+    return out
+
+
+def get_profile_country(profile_id: int) -> str | None:
+    conn = _conn()
+    try:
+        row = conn.execute(
+            "SELECT u.country FROM dim_profile p JOIN dim_user u ON p.user_id = u.user_id "
+            "WHERE p.profile_id = ?", (profile_id,)).fetchone()
+        return row[0] if row else None
+    finally:
+        conn.close()
+
+
+def get_top_in_country(country: str, limit: int = 10) -> list[dict]:
+    from data_engineering import analytics
+    conn = _conn()
+    try:
+        return analytics.top_in_country(conn, country, limit)
+    finally:
+        conn.close()
+
+
 def get_analytics() -> dict:
     from data_engineering import analytics
     conn = _conn()

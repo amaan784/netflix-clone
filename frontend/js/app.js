@@ -86,7 +86,7 @@ function renderRow(row) {
   const r = el(`<section class="row"><h2 class="row-title">${row.title}</h2>
     <div class="row-track"></div></section>`);
   const track = r.querySelector(".row-track");
-  const ranked = row.kind === "trending";
+  const ranked = row.kind === "trending" || row.kind === "country";
   row.items.forEach((item, i) => track.appendChild(card(item, { rank: ranked ? i + 1 : null })));
   return r;
 }
@@ -100,6 +100,7 @@ function card(item, opts = {}) {
         <div class="ch-title">${item.title}</div>
         <div class="ch-meta">${matchPct(item)}% · ${item.release_year} · ${item.genres[0] || ""}</div>
       </div>
+      ${typeof item.progress === "number" ? `<div class="card-progress"><div class="card-progress-fill" style="width:${item.progress}%"></div></div>` : ""}
     </div>`);
   c.addEventListener("click", () => openDetail(item.title_id));
   return c;

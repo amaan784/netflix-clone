@@ -223,8 +223,39 @@ class RecommenderService:
                 blended.pop(t, None)
 
         scored = sorted(blended.items(), key=lambda x: x[1], reverse=True)
-        items = [i for i in self.hydrate(scored, reason="Top pick for you") if allow(i)]
-        return items[:k]
+        scored = [(t, s) for t, s in scored if allow(self.title_lookup[t])]
+        scored = self._mmr_rerank(scored, k)
+        return self.hydrate(scored, reason="Top pick for you")
+
+    def _mmr_rerank(self, scored, k, lam=0.75):
+        """Maximal Marginal Relevance: trade relevance against similarity to
+        already-picked titles so the list isn't dominated by one genre."""
+        sim = self.content.sim
+        idx = self.content.idx_of
+        cand = scored[:max(k * 3, 30)]
+        if sim is None or not cand:
+            return scored[:k]
+        vals = [s for _, s in cand]
+        lo, hi = min(vals), max(vals)
+        rng = (hi - lo) or 1.0
+        rel = {t: (s - lo) / rng for t, s in cand}
+        raw = dict(cand)
+        pool = [t for t, _ in cand]
+        picked, picked_idx = [], []
+        while pool and len(picked) < k:
+            best, best_val = None, -1e18
+            for t in pool:
+                ti = idx.get(t)
+                div = max((sim[ti, j] for j in picked_idx), default=0.0) if ti is not None else 0.0
+                val = lam * rel[t] - (1 - lam) * div
+                if val > best_val:
+                    best, best_val = t, val
+            picked.append(best)
+            bi = idx.get(best)
+            if bi is not None:
+                picked_idx.append(bi)
+            pool.remove(best)
+        return [(t, raw[t]) for t in picked]
 
     def because_you_watched(self, profile_id: int, max_rows=3, k=12):
         """Build 'Because you watched X' rails from the profile's top titles."""
