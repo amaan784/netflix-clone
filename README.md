@@ -1,17 +1,274 @@
-# NetClone v9: Recommendation quality
+# NetClone
 
-Three changes to what users see:
+A local Netflix clone that runs entirely offline. There is no cloud, no
+external API, and no internet requirement. It includes a data-engineering
+pipeline (ETL into a star-schema warehouse), an event-streaming pipeline
+(Kafka-style), and an AI/ML layer (hybrid recommender, semantic search, and a
+natural-language assistant), served behind a Netflix-style web app.
 
-- Top Picks is re-ranked with maximal marginal relevance, giving up a little
-  relevance for variety so the row isn't all one genre (`recommender.py`).
-- A Continue Watching row lists titles that were started but not finished,
-  with a progress bar (`store.py`, `main.py`, frontend).
-- A Top 10 row ranks what viewers in the profile's country watch most
-  (`analytics.py`, `store.py`, `main.py`).
+Stack: FastAPI, uvicorn, pandas, numpy, scikit-learn, SQLite.
 
-## Run
+## Documentation
+
+A full architecture write-up with diagrams (system layers, star schema, the
+hybrid recommender, and the streaming flow) is in
+[ARCHITECTURE.html](ARCHITECTURE.html). Open the file directly in a browser, or
+visit `http://127.0.0.1:8000/architecture.html` while the app is running (also
+linked as "Docs" in the app navbar).
+
+## Quick start
 
 ```powershell
+# optional: install dependencies
 pip install -r requirements.txt
+
+# builds the data warehouse on first launch, then starts the server
 python run.py
 ```
+
+Open http://127.0.0.1:8000 and pick a profile.
+
+Other commands:
+
+```powershell
+python run.py --rebuild   # force-rebuild the warehouse, then serve
+python run.py --etl       # run the ETL pipeline only (no web server)
+python -m data_engineering.pipeline   # same ETL, standalone
+```
+
+Everything runs on localhost.
+
+## Data engineering (`data_engineering/`)
+
+A dimensional model built by a logged, idempotent ETL.
+
+| Stage | What happens |
+|-------|--------------|
+| Extract | Curated catalog (`catalog_seed.py`, 60+ titles) plus a generated population of ~280 viewers with latent genre preferences who produce ~11k watch events and ~4k ratings (`generate_data.py`). |
+| Transform | Surrogate keys, derived attributes (decade, weekend flag), genre normalisation into a bridge table, and a calendar date dimension. |
+| Load | Bulk insert into the SQLite star schema (`schema.sql`). |
+| Validate | 13 data-quality checks: referential integrity, value ranges, null/blank, uniqueness, and "every title has a genre" (`data_quality.py`). The run fails if any check fails. |
+
+Star schema:
+
+- Dimensions: `dim_title`, `dim_genre`, `dim_user`, `dim_profile`, `dim_date`
+- Bridge: `bridge_title_genre` (title to genre many-to-many)
+- Facts: `fact_watch_event` (additive: `watch_seconds`, `completion`), `fact_rating`
+- Operational: `my_list`
+
+Analytics (`analytics.py`) provides the aggregations behind the in-app
+dashboard: top titles by watch hours, watch hours and completion by genre, by
+device, daily active profiles over the date dimension, rating distribution, and
+movie/series split.
+
+The app writes live user actions (`backend/store.py`) back into the same
+warehouse, so a pipeline refresh or model retrain picks up real usage.
+
+## AI / ML (`ai/`)
+
+A recommendation service (`recommender.py`) that trains on startup and exposes
+the rails the home page uses.
+
+1. Content-based filtering (`content_based.py`). TF-IDF over each title's
+   metadata blob (genres x3, keywords x2, cast, director, description, decade),
+   cosine similarity for "More Like This" and a per-profile taste vector.
+
+2. Collaborative filtering (`collaborative.py`). From the implicit-feedback
+   interaction matrix (profiles x titles, valued by an engineered affinity
+   score):
+   - Matrix factorization (`TruncatedSVD`) for latent taste factors and
+     predicted affinity.
+   - Item-item CF for "people who watched A also watched B" (reacts to a
+     profile's current watch set with no retrain).
+
+3. Hybrid ranker (`recommend_for_profile`):
+
+   ```
+   final = 0.40*content + 0.30*item-item + 0.20*matrix-factorization + 0.10*popularity
+   ```
+
+   with min-max normalisation per signal, cold-start fallback to trending, and
+   kids/maturity filtering per profile.
+
+4. Semantic search (`semantic_search.py`). TF-IDF vector space plus a light NL
+   parser that extracts structured intent (decade, movie/series, genre, mood
+   synonyms such as scary to Horror) and applies it as a soft boost. Handles
+   queries like "scary supernatural shows set in a small town".
+
+5. Assistant (`assistant.py`). A rule-based NL assistant that classifies intent
+   (recommend / similar / info / mood / search) and routes to the recommender
+   or search engine, then composes a reply citing real titles.
+
+Watching a title or rating it (`POST /api/watch`, `/api/rate`) updates the
+in-memory profile state immediately, so "Top Picks" and "Because you watched"
+refresh without a full retrain. `POST /api/admin/refresh` retrains everything
+from the warehouse.
+
+Top Picks are diversity re-ranked with MMR (maximal marginal relevance) so the
+list is not dominated by a single genre. The home page also has a Continue
+Watching rail (started-but-unfinished titles, with a resume bar) and a
+"Top 10 in your country" rail.
+
+### Offline evaluation (`ai/evaluation.py`)
+
+There is an offline eval for the recommender. A leakage-free per-profile
+holdout retrains every model on the train split only, then ranks the held-out
+items and scores each model with Precision@K, Recall@K, NDCG@K, MAP@K,
+hit-rate and catalog coverage. Popularity, content-based, item-item, SVD, ALS
+and the hybrid are compared on the same split; the hybrid wins on NDCG@10. A
+grid search can tune the blend weights.
+
+```powershell
+python -m ai.evaluation            # comparison table at K=10
+python -m ai.evaluation --grid     # also tune the hybrid weights
+```
+
+Also exposed at `GET /api/eval` (add `?grid=true` for the weight search).
+
+## Event streaming (`streaming/`)
+
+Watch and rating actions are not written to the database directly. The API
+publishes them to an append-only log, and a background consumer reads the log,
+maintains a time-windowed live trending tally, and sinks each event into the
+warehouse. This is a local, pure-Python stand-in for Kafka (no broker to
+install) that models the same concepts:
+
+- `broker.py` - topics split into partitions; each partition is an ordered log
+  persisted to a `.log` file so it survives restarts and can be replayed.
+  Records are keyed (by profile) so one viewer's events stay ordered in a
+  partition. Consumer groups commit offsets independently.
+- `producer.py` - publishes keyed records to a topic.
+- `consumer.py` - reads from assigned partitions and commits offsets per group.
+- `pipeline.py` - the consumer app: sinks events to the warehouse, updates the
+  live recommender state, and tracks real-time trending.
+
+Topics: `watch-events` (3 partitions), `ratings` (2 partitions). The Analytics
+page shows topic/partition message counts, consumer lag, throughput, and live
+trending. `GET /api/streaming/stats` and `/api/streaming/trending` expose this.
+
+Run the streaming layer on its own (produces sample events and consumes them):
+
+```powershell
+python -m streaming.pipeline
+```
+
+### Using the real Apache Kafka broker
+
+The same pipeline can run against a real Kafka broker instead of the in-process
+log. A single-node Kafka (KRaft mode, no Zookeeper) is provided via Docker, and
+runs entirely on localhost.
+
+```powershell
+docker compose up -d        # start Kafka on localhost:9092
+python run.py --kafka       # run the app against it (sets KAFKA_BOOTSTRAP)
+docker compose down         # stop Kafka when done
+```
+
+`--kafka` sets `KAFKA_BOOTSTRAP=localhost:9092`; you can also set that variable
+yourself. On startup the app probes the broker: if it is reachable it uses
+Kafka (creating the topics if needed), otherwise it falls back to the
+in-process log broker, so the app always runs. The backend in use is shown on
+the Analytics page and in `GET /api/streaming/stats`.
+
+`backends.py` selects the backend and exposes a common interface (producer,
+consumer, stats); `kafka_backend.py` is the kafka-python implementation. The
+consumer, sink, and trending logic are identical for both.
+
+## Frontend features (`frontend/`)
+
+- Profiles: a "Who's watching?" gate; recommendations are per-profile, with a
+  Kids profile that filters out mature content.
+- Home: hero plus personalised rails (Top Picks, Trending, Critically
+  Acclaimed, New Releases, Because you watched X, genre rows).
+- Detail modal: synopsis, cast, warehouse stats (viewers / watch hours /
+  completion), rating, add to My List, and "More Like This".
+- Mock player: simulated playback with a progress bar that emits a real
+  `fact_watch_event` on close.
+- Search: live semantic search as you type.
+- Assistant: chat panel with poster results.
+- Analytics: KPI cards and bar charts from the warehouse.
+- Posters: each title's key art is a procedurally generated SVG
+  (`backend/poster.py`).
+
+## API reference
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/profiles` | selectable demo profiles |
+| GET | `/api/home?profile_id=` | personalised home rails |
+| GET | `/api/title/{id}?profile_id=` | detail, stats, more-like-this |
+| GET | `/api/catalog?type=movie|series` | full catalog (popularity-ranked) |
+| GET | `/api/genre/{name}` | titles in a genre |
+| GET | `/api/recommendations?profile_id=` | hybrid personalised list |
+| GET | `/api/search?q=` | semantic search |
+| POST | `/api/assistant` | assistant (`{profile_id, query}`) |
+| POST | `/api/watch` | record a watch event |
+| POST | `/api/rate` | rate a title (1-5) |
+| GET/POST | `/api/mylist`, `/api/mylist/add`, `/api/mylist/remove` | My List |
+| GET | `/api/analytics` | dashboard payload |
+| GET | `/api/eval` | offline recommender metrics (add `?grid=true` to tune weights) |
+| GET | `/api/streaming/stats` | broker/topic/consumer metrics |
+| GET | `/api/streaming/trending` | live trending from the event stream |
+| GET | `/api/poster/{id}` | SVG poster |
+| POST | `/api/admin/refresh` | retrain models from the warehouse |
+
+## Project layout
+
+```
+netflix clone/
+├── run.py                     # launcher (build DB + serve)
+├── paths.py                   # shared path config
+├── requirements.txt
+├── data_engineering/
+│   ├── catalog_seed.py        # curated 60+ title catalog (source extract)
+│   ├── generate_data.py       # synthetic viewers + interaction events
+│   ├── schema.sql             # star-schema DDL
+│   ├── pipeline.py            # ETL orchestrator (extract, transform, load, validate)
+│   ├── data_quality.py        # data-quality checks
+│   └── analytics.py           # KPI queries
+├── ai/
+│   ├── data_access.py         # warehouse to feature frames
+│   ├── content_based.py       # TF-IDF content model
+│   ├── collaborative.py       # SVD + item-item CF
+│   ├── semantic_search.py     # NL semantic search
+│   ├── recommender.py         # hybrid recommender service (singleton) + MMR
+│   ├── evaluation.py          # offline ranking-metrics harness + weight tuning
+│   └── assistant.py           # assistant
+├── streaming/
+│   ├── broker.py              # append-only log broker (topics/partitions/offsets)
+│   ├── producer.py            # event producer
+│   ├── consumer.py            # consumer with per-group offset commits
+│   ├── kafka_backend.py       # real Kafka backend (kafka-python)
+│   ├── backends.py            # backend selection: Kafka or in-process log
+│   ├── topics.py              # topic config
+│   └── pipeline.py            # consumer app: sink + live trending
+├── docker-compose.yml         # single-node Kafka (KRaft) for the real backend
+├── backend/
+│   ├── main.py                # FastAPI app + routes
+│   ├── store.py               # operational writes
+│   └── poster.py              # SVG posters
+├── frontend/
+│   ├── index.html
+│   ├── css/styles.css
+│   └── js/{api.js, app.js}
+└── data/
+    ├── netflix.db             # generated SQLite warehouse
+    └── logs/etl.log           # pipeline logs
+```
+
+## Tests
+
+```powershell
+pip install pytest
+python -m pytest tests -q
+```
+
+Covers data-quality checks, recommender behaviour (personalization, kids filter,
+cold start, live updates), the ALS model, the evaluation harness (metrics in
+range, hybrid beats the popularity baseline), and an API smoke test.
+
+## Reproducibility
+
+Synthetic data generation is seeded (`SEED = 42`), so every `--rebuild` produces
+the same warehouse. Delete `data/netflix.db` and relaunch to regenerate from
+scratch.

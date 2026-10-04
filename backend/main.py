@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from paths import DB_PATH, FRONTEND_DIR
+from paths import DB_PATH, FRONTEND_DIR, ROOT
 from backend import store
 from backend.poster import poster_svg
 from streaming.topics import WATCH_EVENTS, RATINGS
@@ -339,6 +339,12 @@ def poster(title_id: int, w: int = 300, h: int = 450):
     svg = poster_svg(rec, w=w, h=h)
     return Response(content=svg, media_type="image/svg+xml",
                     headers={"Cache-Control": "public, max-age=86400"})
+
+
+# architecture doc (lives at the repo root, served here so the app can link to it)
+@app.get("/architecture.html")
+def architecture():
+    return FileResponse(ROOT / "ARCHITECTURE.html")
 
 
 # frontend, mounted last so /api/* wins
