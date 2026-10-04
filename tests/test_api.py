@@ -1,0 +1,34 @@
+"""Smoke-test the API route functions directly (no HTTP server needed)."""
+from backend import main
+
+
+def test_profiles_and_home():
+    profiles = main.get_profiles()
+    assert len(profiles) >= 1
+    pid = profiles[0]["profile_id"]
+    home = main.get_home(profile_id=pid)
+    assert home["rows"], "home returned no rows"
+    kinds = {r["kind"] for r in home["rows"]}
+    assert "personalized" in kinds
+
+
+def test_recommendations_and_search():
+    pid = main.get_profiles()[0]["profile_id"]
+    assert main.recommendations(profile_id=pid)["items"]
+    assert "items" in main.search(q="heist movie", profile_id=pid)
+
+
+def test_title_detail_and_poster():
+    pid = main.get_profiles()[0]["profile_id"]
+    catalog = main.catalog(type=None, profile_id=pid)["items"]
+    tid = catalog[0]["title_id"]
+    detail = main.get_title(tid, profile_id=pid)
+    assert detail["stats"] is not None
+    assert len(detail["more_like_this"]) >= 1
+    resp = main.poster(tid)
+    assert resp.body.startswith(b"<svg")
+
+
+def test_eval_endpoint():
+    res = main.eval_models(k=10, include_kids=True)
+    assert "hybrid" in res["models"]
