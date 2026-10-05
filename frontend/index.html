@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NetClone</title>
-  <link rel="stylesheet" href="/css/styles.css?v=6" />
+  <link rel="stylesheet" href="/css/styles.css?v=7" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='900' fill='%23e50914'>N</text></svg>" />
 </head>
 <body>
@@ -97,14 +97,17 @@
   <div id="player-modal" class="modal player-modal hidden">
     <div class="player">
       <div id="player-stage" class="player-stage">
+        <video id="player-video" class="player-video hidden" controls playsinline></video>
         <div class="player-glow"></div>
         <div id="player-title" class="player-title"></div>
         <div class="player-badge">▶ NOW PLAYING</div>
+        <div id="player-credit" class="player-credit"></div>
       </div>
       <div class="player-controls">
         <button id="player-playpause">⏸</button>
         <div class="player-progress"><div id="player-bar" class="player-bar-fill"></div></div>
         <span id="player-time" class="player-time">0%</span>
+        <select id="player-quality" class="player-quality hidden" title="Quality"></select>
         <button id="player-close" class="player-close">✕ Close</button>
       </div>
     </div>
@@ -126,7 +129,9 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/js/api.js?v=6"></script>
-  <script src="/js/app.js?v=6"></script>
+  <script src="/js/api.js?v=7"></script>
+  <script src="/vendor/hls.min.js"></script>
+  <script src="/js/player.js?v=7"></script>
+  <script src="/js/app.js?v=7"></script>
 </body>
 </html>

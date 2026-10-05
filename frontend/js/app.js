@@ -2,7 +2,6 @@
 const state = {
   profile: null,
   homeStale: false,
-  player: { item: null, pct: 0, timer: null, paused: false },
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -171,49 +170,7 @@ function card2(item) {  // card for in-modal rows
 }
 function closeDetail() { $("#detail-modal").classList.add("hidden"); }
 
-// player: mock playback that emits a real watch event
-function openPlayer(item) {
-  state.player = { item, pct: 0, timer: null, paused: false };
-  $("#player-title").textContent = item.title;
-  $("#player-bar").style.width = "0%";
-  $("#player-time").textContent = "0%";
-  $("#player-playpause").textContent = "⏸";
-  $("#player-modal").classList.remove("hidden");
-  // fast-forwarded simulated playthrough, ticks every 280ms
-  state.player.timer = setInterval(() => {
-    if (state.player.paused) return;
-    state.player.pct = Math.min(100, state.player.pct + 1.6);
-    $("#player-bar").style.width = state.player.pct + "%";
-    $("#player-time").textContent = Math.round(state.player.pct) + "%";
-    if (state.player.pct >= 100) finishPlayer();
-  }, 280);
-}
-function togglePause() {
-  state.player.paused = !state.player.paused;
-  $("#player-playpause").textContent = state.player.paused ? "▶" : "⏸";
-}
-async function finishPlayer() { await closePlayer(); }
-async function closePlayer() {
-  const p = state.player;
-  if (p.timer) clearInterval(p.timer);
-  $("#player-modal").classList.add("hidden");
-  if (p.item && p.pct > 1) {
-    const completion = p.pct / 100;
-    const runtime = (p.item.runtime_minutes || 60) * 60;
-    try {
-      await API.watch({
-        profile_id: state.profile.profile_id,
-        title_id: p.item.title_id,
-        watch_seconds: Math.round(runtime * completion),
-        completion,
-        device: "Web",
-      });
-      state.homeStale = true;
-      toast(`Saved your progress on "${p.item.title}". Recommendations updated.`);
-    } catch (e) { /* ignore */ }
-  }
-  state.player = { item: null, pct: 0, timer: null, paused: false };
-}
+// the player (openPlayer, closePlayer, togglePause) lives in player.js
 
 // my list + ratings
 async function toggleList(titleId, btn) {

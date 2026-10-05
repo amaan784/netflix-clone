@@ -212,6 +212,11 @@ a { cursor: pointer; }
 .player-bar-fill { height: 100%; width: 0; background: var(--red); transition: width .2s linear; }
 .player-time { color: #ccc; font-size: 13px; min-width: 40px; }
 .player-close { font-size: 15px !important; color: #ccc !important; }
+.player-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+.player-credit { position: absolute; top: 20px; right: 24px; z-index: 3; max-width: 60%;
+  text-align: right; color: #ccc; font-size: 12px; text-shadow: 0 1px 3px #000; }
+.player-quality { margin-left: auto; background: #1c1c24; color: #ddd; border: 1px solid #34343e;
+  border-radius: 4px; padding: 4px 8px; font-size: 13px; }
 
 /* assistant */
 .assistant-panel {
