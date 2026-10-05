@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from paths import DB_PATH, FRONTEND_DIR, ROOT
-from backend import store
+from backend import store, video
 from backend.poster import poster_svg
 from streaming.topics import WATCH_EVENTS, RATINGS
 
@@ -358,6 +358,7 @@ def health():
     return {"status": "ok", "models_ready": _svc is not None and _svc.ready}
 
 
+video.install(app)  # /api/play and /media/*, ahead of the catch-all frontend mount
 app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
 
 
