@@ -15,6 +15,9 @@ scikit-learn==1.*
 # uses the standard library). Set KAFKA_BOOTSTRAP to enable it.
 kafka-python-ng==2.2.*
 
+# Video: a bundled ffmpeg for media.ingest (not needed if ffmpeg is already installed)
+imageio-ffmpeg==0.6.*
+
 # Tests
 pytest==8.*
 
