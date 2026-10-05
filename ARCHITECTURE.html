@@ -78,6 +78,7 @@
     <a href="#data">Data Engineering</a>
     <a href="#ai">AI / ML</a>
     <a href="#streaming">Streaming</a>
+    <a href="#video">Video</a>
     <a href="#api">API</a>
     <a href="#run">Run</a>
   </nav>
@@ -97,10 +98,11 @@
       <span class="badge">pandas / numpy</span>
       <span class="badge">Kafka-style streaming</span>
       <span class="badge">Vanilla-JS SPA</span>
+      <span class="badge">HLS video (ffmpeg + hls.js)</span>
       <span class="badge">No cloud · no internet</span>
     </div>
-    <p style="margin-top:18px"><span class="pill real">REAL</span> app, data warehouse, ML models, ETL, analytics, streaming pipeline &nbsp;
-       <span class="pill sim">SIMULATED</span> video playback (mock player) &amp; synthetic viewer history</p>
+    <p style="margin-top:18px"><span class="pill real">REAL</span> app, data warehouse, ML models, ETL, analytics, streaming pipeline, adaptive HLS video &nbsp;
+       <span class="pill sim">SIMULATED</span> synthetic viewer history; titles play openly licensed stand-in films</p>
   </div>
 
   <!-- ARCHITECTURE -->
@@ -172,27 +174,28 @@
 ├── run.py                  launcher (build DB + serve; --rebuild / --etl / --kafka)
 ├── paths.py                shared path config
 ├── docker-compose.yml      single-node Kafka (KRaft) for the real streaming backend
+├── media/                  library (films, quality ladder) · ingest (download + HLS transcode)
 ├── data_engineering/       catalog_seed · generate_data · schema.sql · pipeline
 │                           · data_quality · analytics
 ├── ai/                     data_access · content_based · collaborative
 │                           · semantic_search · recommender · assistant
 ├── streaming/              broker · producer · consumer · kafka_backend
 │                           · backends · topics · pipeline
-├── backend/                main (FastAPI) · store · poster
-├── frontend/               index.html · css/styles.css · js/{api,app}.js
-└── data/                   netflix.db · logs/ · streaming/ (event logs)</code></pre>
+├── backend/                main (FastAPI) · store · video · poster
+├── frontend/               index.html · css/styles.css · js/{api,player,app}.js · vendor/hls.min.js
+└── data/                   netflix.db · logs/ · streaming/ (event logs) · media/ (HLS streams)</code></pre>
   </section>
 
   <!-- FRONTEND -->
   <section id="frontend">
     <h2><span class="num">02</span>Frontend</h2>
     <p>A dependency-free single-page app (vanilla JS, no build step). <code>api.js</code> is a thin
-    fetch wrapper; <code>app.js</code> holds all view logic and state.</p>
+    fetch wrapper; <code>player.js</code> is the video player; <code>app.js</code> holds the rest of the view logic and state.</p>
     <div class="grid2">
       <div class="card"><h4>Profiles</h4><p>"Who's watching?" gate. Recommendations are per-profile; a Kids profile filters out mature content.</p></div>
       <div class="card"><h4>Home</h4><p>Hero banner + personalised rails: Continue Watching (with a resume bar), Top Picks, Trending, Critically Acclaimed, New Releases, "Because you watched X", genre rows, and "Top 10 in your country".</p></div>
       <div class="card"><h4>Detail modal</h4><p>Synopsis, cast, real warehouse stats (viewers / watch-hours / completion), rating buttons, My List, "More Like This".</p></div>
-      <div class="card"><h4>Mock player</h4><p>Simulated playback with a progress bar that emits a real watch event on close - feeding the recommender.</p></div>
+      <div class="card"><h4>Video player</h4><p>Adaptive HLS playback with a quality picker and resume. Reports the seconds actually watched, which feeds the recommender and Continue Watching.</p></div>
       <div class="card"><h4>Search</h4><p>Live semantic search as you type.</p></div>
       <div class="card"><h4>AI Concierge</h4><p>Chat panel that returns grounded recommendations with poster cards.</p></div>
       <div class="card"><h4>Analytics</h4><p>KPI cards, bar charts from the warehouse, and the live streaming-pipeline panel.</p></div>
@@ -209,6 +212,7 @@
     <ul>
       <li><b>main.py</b> - routes, Pydantic request models, model/streaming bootstrap, static mount.</li>
       <li><b>store.py</b> - operational writes (watch events, ratings, My List) into the warehouse.</li>
+      <li><b>video.py</b> - <code>/api/play/{id}</code> (stream URL, duration, resume point) and the <code>/media/*</code> file server for HLS playlists and segments.</li>
       <li><b>poster.py</b> - deterministic SVG poster from each title's stored hue + metadata.</li>
     </ul>
   </section>
@@ -432,9 +436,67 @@
     </ul>
   </section>
 
+  <!-- VIDEO -->
+  <section id="video">
+    <h2><span class="num">07</span>Video streaming</h2>
+    <p>Playback is adaptive HLS, the approach real streaming services use. Each film is cut into 4-second
+    segments at up to three qualities, and the player picks the quality segment by segment based on
+    measured bandwidth. The catalog titles are copyrighted, so every title plays one of three openly
+    licensed Blender films (Big Buck Bunny, Elephants Dream, Tears of Steel), credited on screen.</p>
+
+    <div class="figure">
+      <svg viewBox="0 0 900 230" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+        <defs>
+          <marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker>
+        </defs>
+        <rect x="20" y="85" width="140" height="56" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="90" y="108" text-anchor="middle" fill="#fff">film source</text>
+        <text x="90" y="126" text-anchor="middle" fill="#a0a0a8" font-size="11">download.blender.org</text>
+
+        <line x1="160" y1="113" x2="222" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
+        <rect x="224" y="78" width="150" height="70" rx="8" fill="#1a1a22" stroke="#ffb14a"/>
+        <text x="299" y="104" text-anchor="middle" fill="#fff" font-weight="700">media.ingest</text>
+        <text x="299" y="122" text-anchor="middle" fill="#a0a0a8" font-size="11">ffmpeg, one pass,</text>
+        <text x="299" y="137" text-anchor="middle" fill="#a0a0a8" font-size="11">aligned keyframes</text>
+
+        <line x1="374" y1="113" x2="436" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
+        <rect x="438" y="30" width="170" height="166" rx="8" fill="#141418" stroke="#46d369"/>
+        <text x="523" y="54" text-anchor="middle" fill="#fff" font-weight="700">master.m3u8</text>
+        <rect x="458" y="68" width="130" height="30" rx="5" fill="#101015" stroke="#3a3a44"/>
+        <text x="523" y="88" text-anchor="middle" fill="#cfcfcf">720p · 2.5 Mbps</text>
+        <rect x="458" y="106" width="130" height="30" rx="5" fill="#101015" stroke="#3a3a44"/>
+        <text x="523" y="126" text-anchor="middle" fill="#cfcfcf">360p · 800 kbps</text>
+        <rect x="458" y="144" width="130" height="30" rx="5" fill="#101015" stroke="#3a3a44"/>
+        <text x="523" y="164" text-anchor="middle" fill="#cfcfcf">240p · 400 kbps</text>
+        <text x="523" y="190" text-anchor="middle" fill="#a0a0a8" font-size="11">4 s .ts segments each</text>
+
+        <line x1="608" y1="113" x2="670" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
+        <rect x="672" y="78" width="200" height="70" rx="8" fill="#1a1a22" stroke="#e50914"/>
+        <text x="772" y="104" text-anchor="middle" fill="#fff" font-weight="700">player.js + hls.js</text>
+        <text x="772" y="122" text-anchor="middle" fill="#a0a0a8" font-size="11">bandwidth-based switching,</text>
+        <text x="772" y="137" text-anchor="middle" fill="#a0a0a8" font-size="11">resume, watch-time events</text>
+      </svg>
+      <div class="cap">Figure 5. Each film becomes a quality ladder the player switches between as bandwidth changes.</div>
+    </div>
+
+    <ul>
+      <li><b>Ingest</b> (<code>python -m media.ingest</code>) downloads each film, then ffmpeg encodes every
+      quality in one pass. A keyframe is forced at each segment boundary so all qualities line up and
+      switching never glitches. A film only gets the qualities that fit its own resolution. If a
+      download fails, a generated test-pattern clip is used instead, so the pipeline also works offline.</li>
+      <li><b>Serving</b>: <code>/api/play/{id}</code> maps the title to a film and returns the master
+      playlist URL, the duration, and a resume point (the same started-but-unfinished rule as Continue
+      Watching). The playlists and segments are static files under <code>/media/</code>.</li>
+      <li><b>Playback</b>: hls.js (vendored, so it works offline) feeds the segments to the browser's
+      <code>&lt;video&gt;</code>; Safari uses its native HLS support. The player counts real seconds
+      watched (seeks excluded) and posts them as a watch event, so the recommender and Continue
+      Watching react to actual viewing. With no ingested video it falls back to simulated playback.</li>
+    </ul>
+  </section>
+
   <!-- API -->
   <section id="api">
-    <h2><span class="num">07</span>API reference</h2>
+    <h2><span class="num">08</span>API reference</h2>
     <table>
       <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
       <tr><td>GET</td><td><code>/api/profiles</code></td><td>selectable demo profiles</td></tr>
@@ -453,13 +515,15 @@
       <tr><td>GET</td><td><code>/api/streaming/stats</code></td><td>broker/topic/consumer metrics</td></tr>
       <tr><td>GET</td><td><code>/api/streaming/trending</code></td><td>live trending from the stream</td></tr>
       <tr><td>GET</td><td><code>/api/poster/{id}</code></td><td>procedural SVG poster</td></tr>
+      <tr><td>GET</td><td><code>/api/play/{id}?profile_id=</code></td><td>stream URL, duration, resume point</td></tr>
+      <tr><td>GET</td><td><code>/media/{film}/master.m3u8</code></td><td>HLS playlists and segments</td></tr>
       <tr><td>POST</td><td><code>/api/admin/refresh</code></td><td>retrain models from the warehouse</td></tr>
     </table>
   </section>
 
   <!-- RUN -->
   <section id="run">
-    <h2><span class="num">08</span>Running it</h2>
+    <h2><span class="num">09</span>Running it</h2>
 <pre><code># optional: install dependencies
 pip install -r requirements.txt
 
@@ -471,6 +535,10 @@ python run.py
 python run.py --rebuild   # force-rebuild the warehouse, then serve
 python run.py --etl       # run the ETL pipeline only
 python -m streaming.pipeline   # standalone streaming demo
+
+# real video (one-time, about 645 MB of downloads)
+python -m media.ingest                  # download films, build HLS streams
+python -m media.ingest --placeholder    # offline: generated test-pattern clips
 
 # real Kafka backend (optional)
 docker compose up -d      # single-node Kafka on localhost:9092

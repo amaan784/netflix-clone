@@ -3,10 +3,11 @@
 A local Netflix clone that runs entirely offline. There is no cloud, no
 external API, and no internet requirement. It includes a data-engineering
 pipeline (ETL into a star-schema warehouse), an event-streaming pipeline
-(Kafka-style), and an AI/ML layer (hybrid recommender, semantic search, and a
-natural-language assistant), served behind a Netflix-style web app.
+(Kafka-style), an AI/ML layer (hybrid recommender, semantic search, and a
+natural-language assistant), and adaptive HLS video streaming, served behind a
+Netflix-style web app.
 
-Stack: FastAPI, uvicorn, pandas, numpy, scikit-learn, SQLite.
+Stack: FastAPI, uvicorn, pandas, numpy, scikit-learn, SQLite, ffmpeg, hls.js.
 
 ## Documentation
 
@@ -27,6 +28,13 @@ python run.py
 ```
 
 Open http://127.0.0.1:8000 and pick a profile.
+
+To play real video, fetch and convert the films once (about 645 MB of downloads,
+see [Video streaming](#video-streaming-media)):
+
+```powershell
+python -m media.ingest
+```
 
 Other commands:
 
@@ -174,6 +182,46 @@ the Analytics page and in `GET /api/streaming/stats`.
 consumer, stats); `kafka_backend.py` is the kafka-python implementation. The
 consumer, sink, and trending logic are identical for both.
 
+## Video streaming (`media/`)
+
+Playback is adaptive HLS, the same approach real streaming services use. Each
+film is cut into 4-second segments at up to three qualities (240p, 360p, 720p),
+and the player switches between them as bandwidth changes. You can also pick a
+quality by hand.
+
+The catalog titles are copyrighted, so every title plays one of three
+openly licensed Blender films instead, and the player credits whichever one is
+playing:
+
+| Film | Source file (download.blender.org) | Size | License |
+|------|------------------------------------|------|---------|
+| Big Buck Bunny (2008) | `BigBuckBunny_640x360.m4v.zip` | 121 MB | CC BY 3.0 |
+| Elephants Dream (2006) | `elephantsdream-720-h264-st-aac.mov` | 152 MB | CC BY 2.5 |
+| Tears of Steel (2012) | `tears_of_steel_720p.mov` | 372 MB | CC BY 3.0 |
+
+```powershell
+python -m media.ingest                  # download, transcode, delete the originals
+python -m media.ingest --placeholder    # no download: generated test-pattern clips
+python -m media.ingest --only tears_of_steel --keep-source
+```
+
+- `media/library.py` - the film list, the quality ladder, and which film a
+  title plays.
+- `media/ingest.py` - downloads each film, then has ffmpeg encode every quality
+  in one pass with a keyframe at each segment boundary, so switching quality
+  never glitches. Writes `data/media/hls/<film>/master.m3u8` and a
+  `manifest.json`. If a download fails it generates a placeholder clip instead.
+- `backend/video.py` - `GET /api/play/{id}` returns the stream URL, duration
+  and a resume point; `/media/*` serves the playlists and segments.
+- `frontend/js/player.js` - plays the stream with hls.js (Safari plays HLS
+  natively). It resumes where you left off and reports the seconds you
+  actually watched, which feeds the recommender and Continue Watching. Without
+  any ingested video it falls back to the old simulated player.
+
+ffmpeg comes from the `imageio-ffmpeg` package unless one is already on your
+PATH. hls.js 1.7.3 is vendored in `frontend/vendor/` (Apache-2.0), so the
+player works offline.
+
 ## Frontend features (`frontend/`)
 
 - Profiles: a "Who's watching?" gate; recommendations are per-profile, with a
@@ -182,8 +230,8 @@ consumer, sink, and trending logic are identical for both.
   Acclaimed, New Releases, Because you watched X, genre rows).
 - Detail modal: synopsis, cast, warehouse stats (viewers / watch hours /
   completion), rating, add to My List, and "More Like This".
-- Mock player: simulated playback with a progress bar that emits a real
-  `fact_watch_event` on close.
+- Player: adaptive HLS video with a quality picker, resume, and real
+  watch-time reporting; falls back to simulated playback if no video is set up.
 - Search: live semantic search as you type.
 - Assistant: chat panel with poster results.
 - Analytics: KPI cards and bar charts from the warehouse.
@@ -210,6 +258,8 @@ consumer, sink, and trending logic are identical for both.
 | GET | `/api/streaming/stats` | broker/topic/consumer metrics |
 | GET | `/api/streaming/trending` | live trending from the event stream |
 | GET | `/api/poster/{id}` | SVG poster |
+| GET | `/api/play/{id}?profile_id=` | stream URL, duration and resume point |
+| GET | `/media/{film}/master.m3u8` | HLS playlists and segments |
 | POST | `/api/admin/refresh` | retrain models from the warehouse |
 
 ## Project layout
@@ -243,16 +293,22 @@ netflix clone/
 │   ├── topics.py              # topic config
 │   └── pipeline.py            # consumer app: sink + live trending
 ├── docker-compose.yml         # single-node Kafka (KRaft) for the real backend
+├── media/
+│   ├── library.py             # film list, quality ladder, title -> film mapping
+│   └── ingest.py              # download + ffmpeg HLS transcode
 ├── backend/
 │   ├── main.py                # FastAPI app + routes
 │   ├── store.py               # operational writes
+│   ├── video.py               # /api/play + HLS file serving
 │   └── poster.py              # SVG posters
 ├── frontend/
 │   ├── index.html
 │   ├── css/styles.css
-│   └── js/{api.js, app.js}
+│   ├── js/{api.js, player.js, app.js}
+│   └── vendor/hls.min.js      # hls.js 1.7.3 (Apache-2.0)
 └── data/
     ├── netflix.db             # generated SQLite warehouse
+    ├── media/                 # generated HLS streams + manifest.json
     └── logs/etl.log           # pipeline logs
 ```
 
@@ -265,7 +321,8 @@ python -m pytest tests -q
 
 Covers data-quality checks, recommender behaviour (personalization, kids filter,
 cold start, live updates), the ALS model, the evaluation harness (metrics in
-range, hybrid beats the popularity baseline), and an API smoke test.
+range, hybrid beats the popularity baseline), the video pipeline (placeholder
+ingest into multi-bitrate HLS, the play endpoint), and an API smoke test.
 
 ## Reproducibility
 
