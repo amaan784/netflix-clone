@@ -2,6 +2,7 @@
 const state = {
   profile: null,
   homeStale: false,
+  logos: new Set(),  // titles with a TMDB logo image
 };
 
 const $ = (sel) => document.querySelector(sel);
@@ -9,6 +10,10 @@ const el = (html) => { const t = document.createElement("template"); t.innerHTML
 
 // boot
 async function init() {
+  const art = await API.artwork().catch(() => ({}));
+  state.logos = new Set(art.logos || []);
+  API.artVersion = encodeURIComponent(art.version || "none");
+  if (art.attribution) $("#art-credit").textContent = art.attribution;
   const profiles = await API.profiles();
   const list = $("#profile-list");
   list.innerHTML = "";
@@ -61,10 +66,10 @@ function renderHero(item) {
   const match = matchPct(item);
   const hero = $("#hero");
   hero.innerHTML = `
-    <div class="hero-bg"><img src="${API.posterUrl(item.title_id, 1200, 700)}" alt=""></div>
+    <div class="hero-bg"><img src="${API.backdropUrl(item.title_id)}" alt=""></div>
     <div class="hero-content">
       <div class="hero-tag">${item.content_type === "series" ? "SERIES" : "FILM"}</div>
-      <h1 class="hero-title">${item.title}</h1>
+      <h1 class="hero-title">${titleArt(item)}</h1>
       <div class="hero-meta">
         <span class="match">${match}% Match</span>
         <span>${item.release_year}</span>
@@ -112,10 +117,10 @@ async function openDetail(titleId) {
   const card = $("#detail-card");
   card.innerHTML = `
     <div class="detail-hero">
-      <div class="dh-bg"><img src="${API.posterUrl(data.title_id, 900, 420)}"></div>
+      <div class="dh-bg"><img src="${API.backdropUrl(data.title_id, 900, 420)}"></div>
       <button class="detail-close">✕</button>
       <div class="detail-hero-content">
-        <h2>${data.title}</h2>
+        <h2>${titleArt(data)}</h2>
         <div class="detail-actions">
           <button class="btn btn-play">▶ Play</button>
           <button class="icon-btn js-list ${inList ? "active" : ""}" title="My List">${inList ? "✓" : "+"}</button>
@@ -330,6 +335,11 @@ function barChart(sel, rows, suffix = "") {
 }
 
 // helpers + global wiring
+function titleArt(item) {  // the title's logo when TMDB has one, otherwise its name
+  return state.logos.has(item.title_id)
+    ? `<img class="title-logo" src="${API.logoUrl(item.title_id)}" alt="${item.title}">`
+    : item.title;
+}
 function matchPct(item) {
   if (typeof item.score === "number" && item.score > 0) return Math.min(99, Math.round(60 + item.score * 39));
   return Math.min(99, Math.round((item.imdb_score || 7) * 9.5));

@@ -36,6 +36,13 @@ see [Video streaming](#video-streaming-media)):
 python -m media.ingest
 ```
 
+For real poster art, add a free TMDB key (see [Artwork](#artwork-tmdb)):
+
+```powershell
+copy .env.example .env      # then paste your key into .env
+python -m data_engineering.tmdb
+```
+
 Other commands:
 
 ```powershell
@@ -221,6 +228,23 @@ python -m media.ingest --only tears_of_steel --keep-source
 ffmpeg comes from the `imageio-ffmpeg` package unless one is already on your
 PATH. hls.js 1.7.3 is vendored in `frontend/vendor/` (Apache-2.0), so the
 player works offline.
+
+## Artwork (TMDB)
+
+By default every title gets a generated poster (`backend/poster.py`). With a
+free TMDB API key, `python -m data_engineering.tmdb` matches each title by name,
+year and type, and downloads its poster, banner and title logo into
+`data/tmdb/`. The app serves them from there, so after one run everything works
+offline again; titles without a match keep the generated poster.
+
+1. Create a free account at https://www.themoviedb.org and request an API key
+   (Settings, then API).
+2. Copy `.env.example` to `.env` and paste either the "API Read Access Token" or
+   the "API Key" after `TMDB_API_KEY=`. `.env` stays on your machine.
+3. Run `python -m data_engineering.tmdb`. Reload the app.
+
+Image URLs carry the art's version, so browsers pick up new art straight away.
+This product uses the TMDB API but is not endorsed or certified by TMDB.
 
 ## Frontend features (`frontend/`)
 

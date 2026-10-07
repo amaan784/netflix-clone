@@ -18,7 +18,9 @@ def test_recommendations_and_search():
     assert "items" in main.search(q="heist movie", profile_id=pid)
 
 
-def test_title_detail_and_poster():
+def test_title_detail_and_poster(tmp_path, monkeypatch):
+    from data_engineering import tmdb
+    monkeypatch.setattr(tmdb, "TMDB_DIR", tmp_path)  # no downloaded art: generated posters
     pid = main.get_profiles()[0]["profile_id"]
     catalog = main.catalog(type=None, profile_id=pid)["items"]
     tid = catalog[0]["title_id"]

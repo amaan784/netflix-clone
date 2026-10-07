@@ -27,6 +27,11 @@ const API = {
   rate: (b) => API.post("/api/rate", b),
   listAdd: (pid, tid) => API.post("/api/mylist/add", { profile_id: pid, title_id: tid }),
   listRemove: (pid, tid) => API.post("/api/mylist/remove", { profile_id: pid, title_id: tid }),
+  artwork: () => API.get("/api/artwork"),
 
-  posterUrl: (id, w = 300, h = 450) => `/api/poster/${id}?w=${w}&h=${h}`,
+  // changes whenever new TMDB art is downloaded, so browsers don't keep old images
+  artVersion: "none",
+  posterUrl: (id, w = 300, h = 450) => `/api/poster/${id}?w=${w}&h=${h}&v=${API.artVersion}`,
+  backdropUrl: (id, w = 1280, h = 720) => `/api/backdrop/${id}?w=${w}&h=${h}&v=${API.artVersion}`,
+  logoUrl: (id) => `/api/logo/${id}?v=${API.artVersion}`,
 };

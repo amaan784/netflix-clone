@@ -9,6 +9,7 @@ import json
 import logging
 import sqlite3
 import time
+import zlib
 from datetime import date, datetime
 
 from paths import DB_PATH, SCHEMA_PATH, LOG_DIR
@@ -70,7 +71,8 @@ def transform(users, profiles, affinities):
             "language": t["language"],
             "imdb_score": t["imdb"],
             "added_date": (added_base.replace(year=2018 + (i % 6))).isoformat(),
-            "poster_hue": (hash(t["title"]) % 360 + 360) % 360,
+            # crc32, not hash(): str hashes change between runs, and the colour shouldn't
+            "poster_hue": zlib.crc32(t["title"].encode("utf-8")) % 360,
             "decade": _decade(t["year"]),
         })
         for g in t["genres"]:
@@ -199,6 +201,23 @@ def run_pipeline(verbose: bool = True) -> dict:
                 elapsed, report["passed"], report["total"])
     return {"elapsed_s": round(elapsed, 2), "dq": report,
             "counts": {k: len(v) for k, v in data.items()}}
+
+
+def warehouse_ready() -> bool:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        try:
+            return conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0] > 0
+        finally:
+            conn.close()
+    except sqlite3.Error:
+        return False
+
+
+def ensure_warehouse():
+    """Build the warehouse unless it's already there (first run, or data/ was deleted)."""
+    if not warehouse_ready():
+        run_pipeline()
 
 
 if __name__ == "__main__":

@@ -8,13 +8,12 @@ import sqlite3
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from paths import DB_PATH, FRONTEND_DIR, ROOT
-from backend import store, video
-from backend.poster import poster_svg
+from backend import artwork, store, video
 from streaming.topics import WATCH_EVENTS, RATINGS
 
 
@@ -26,28 +25,13 @@ _processor = None
 _backend = None
 
 
-def _ensure_db():
-    """Build the database via the pipeline if it doesn't exist yet."""
-    need = True
-    if DB_PATH.exists():
-        try:
-            conn = sqlite3.connect(DB_PATH)
-            n = conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0]
-            conn.close()
-            need = n == 0
-        except sqlite3.Error:
-            need = True
-    if need:
-        from data_engineering.pipeline import run_pipeline
-        run_pipeline()
-
-
 def svc():
     global _svc, _concierge
     if _svc is None:
-        _ensure_db()
+        from data_engineering.pipeline import ensure_warehouse
         from ai.recommender import get_service
         from ai.assistant import AIConcierge
+        ensure_warehouse()
         _svc = get_service()
         _concierge = AIConcierge(_svc)
     return _svc
@@ -129,7 +113,7 @@ class AssistantBody(BaseModel):
 # catalog / profiles
 @app.get("/api/profiles")
 def get_profiles():
-    s = svc()
+    svc()  # makes sure the warehouse exists
     conn = sqlite3.connect(DB_PATH)
     try:
         rows = conn.execute("""
@@ -330,15 +314,32 @@ def refresh():
     return {"ok": True, "message": "Models retrained from warehouse."}
 
 
-# posters
-@app.get("/api/poster/{title_id}")
-def poster(title_id: int, w: int = 300, h: int = 450):
+# artwork: TMDB images once data_engineering.tmdb has run, generated SVGs until then
+def _title_or_404(title_id: int) -> dict:
     rec = svc().get_title(title_id)
     if not rec:
         raise HTTPException(404, "Title not found")
-    svg = poster_svg(rec, w=w, h=h)
-    return Response(content=svg, media_type="image/svg+xml",
-                    headers={"Cache-Control": "public, max-age=86400"})
+    return rec
+
+
+@app.get("/api/poster/{title_id}")
+def poster(title_id: int, w: int = 300, h: int = 450):
+    return artwork.image(_title_or_404(title_id), "poster", w, h)
+
+
+@app.get("/api/backdrop/{title_id}")
+def backdrop(title_id: int, w: int = 1280, h: int = 720):
+    return artwork.image(_title_or_404(title_id), "backdrop", w, h)
+
+
+@app.get("/api/logo/{title_id}")
+def logo(title_id: int):
+    return artwork.image(_title_or_404(title_id), "logo", 0, 0)
+
+
+@app.get("/api/artwork")
+def artwork_status():
+    return artwork.status(svc().get_title)
 
 
 # architecture doc (lives at the repo root, served here so the app can link to it)
@@ -350,7 +351,9 @@ def architecture():
 # frontend, mounted last so /api/* wins
 @app.get("/")
 def index():
-    return FileResponse(FRONTEND_DIR / "index.html")
+    # no-cache = revalidate every time; otherwise a browser can keep an old page
+    # (and its old ?v= script links) for hours after an update
+    return FileResponse(FRONTEND_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 @app.get("/health")
@@ -358,8 +361,18 @@ def health():
     return {"status": "ok", "models_ready": _svc is not None and _svc.ready}
 
 
+class FrontendFiles(StaticFiles):
+    """The frontend's files with no-cache, so browsers check for a newer copy
+    (a cheap 304 when nothing changed) instead of guessing how long to keep one."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "no-cache")
+        return response
+
+
 video.install(app)  # /api/play and /media/*, ahead of the catch-all frontend mount
-app.mount("/", StaticFiles(directory=str(FRONTEND_DIR), html=True), name="static")
+app.mount("/", FrontendFiles(directory=str(FRONTEND_DIR), html=True), name="static")
 
 
 if __name__ == "__main__":

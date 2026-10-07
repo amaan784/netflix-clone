@@ -19,7 +19,8 @@ def _wrap(text: str, width: int = 16):
     return lines[:4]
 
 
-def poster_svg(rec: dict, w: int = 300, h: int = 450) -> str:
+def poster_svg(rec: dict, w: int = 300, h: int = 450, labels: bool = True) -> str:
+    """labels=False draws just the background, for banners that put the title on top themselves."""
     hue = rec.get("poster_hue", 210)
     title = rec.get("title", "Untitled")
     year = rec.get("release_year", "")
@@ -42,8 +43,7 @@ def poster_svg(rec: dict, w: int = 300, h: int = 450) -> str:
         for i, line in enumerate(lines))
 
     gid = f"g{hue}"
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">
-  <defs>
+    background = f'''<defs>
     <linearGradient id="{gid}" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="{c1}"/>
       <stop offset="100%" stop-color="{c2}"/>
@@ -54,7 +54,11 @@ def poster_svg(rec: dict, w: int = 300, h: int = 450) -> str:
     </radialGradient>
   </defs>
   <rect width="{w}" height="{h}" fill="url(#{gid})"/>
-  <rect width="{w}" height="{h}" fill="url(#vig{hue})"/>
+  <rect width="{w}" height="{h}" fill="url(#vig{hue})"/>'''
+    if not labels:
+        return f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">\n  {background}\n</svg>'
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {w} {h}" width="{w}" height="{h}">
+  {background}
   <circle cx="{w-46}" cy="46" r="3" fill="{accent}" opacity="0.9"/>
   <text x="26" y="50" fill="{accent}" font-size="22" font-weight="900"
         font-family="Arial, sans-serif">N</text>

@@ -34,19 +34,6 @@ def _minmax(d: dict) -> dict:
     return {k: (v - lo) / (hi - lo) for k, v in d.items()}
 
 
-def _ensure_warehouse():
-    # a fresh checkout has no database yet; the API builds it on startup, the CLI has to here
-    try:
-        conn = sqlite3.connect(DB_PATH)
-        built = conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0] > 0
-        conn.close()
-    except sqlite3.Error:
-        built = False
-    if not built:
-        from data_engineering.pipeline import run_pipeline
-        run_pipeline()
-
-
 def _load_events_ratings():
     conn = sqlite3.connect(DB_PATH)
     try:
@@ -321,7 +308,9 @@ if __name__ == "__main__":
     ap.add_argument("--grid", action="store_true")
     args = ap.parse_args()
 
-    _ensure_warehouse()
+    # a fresh checkout has no database yet; the API builds it on startup, the CLI has to here
+    from data_engineering.pipeline import ensure_warehouse
+    ensure_warehouse()
     result = run_evaluation(ks=(5, args.k, 20), strategy=args.strategy,
                             include_kids=not args.no_kids)
     _print_table(result)

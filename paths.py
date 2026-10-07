@@ -8,6 +8,7 @@ SCHEMA_PATH = ROOT / "data_engineering" / "schema.sql"
 FRONTEND_DIR = ROOT / "frontend"
 LOG_DIR = ROOT / "data" / "logs"
 STREAM_DIR = ROOT / "data" / "streaming"
+TMDB_DIR = ROOT / "data" / "tmdb"
 
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOG_DIR.mkdir(parents=True, exist_ok=True)
