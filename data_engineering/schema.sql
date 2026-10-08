@@ -29,6 +29,18 @@ CREATE TABLE IF NOT EXISTS dim_genre (
     genre_name TEXT NOT NULL UNIQUE
 );
 
+-- A series' episodes. Movies have none.
+CREATE TABLE IF NOT EXISTS dim_episode (
+    episode_id      INTEGER PRIMARY KEY,
+    title_id        INTEGER NOT NULL REFERENCES dim_title(title_id),
+    season_number   INTEGER NOT NULL,
+    episode_number  INTEGER NOT NULL,
+    episode_title   TEXT    NOT NULL,
+    runtime_minutes INTEGER NOT NULL,
+    synopsis        TEXT,             -- filled in from TMDB when its data has been fetched
+    UNIQUE (title_id, season_number, episode_number)
+);
+
 -- Many-to-many bridge between titles and genres.
 CREATE TABLE IF NOT EXISTS bridge_title_genre (
     title_id INTEGER NOT NULL REFERENCES dim_title(title_id),
@@ -71,9 +83,10 @@ CREATE TABLE IF NOT EXISTS fact_watch_event (
     event_id      INTEGER PRIMARY KEY,
     profile_id    INTEGER NOT NULL REFERENCES dim_profile(profile_id),
     title_id      INTEGER NOT NULL REFERENCES dim_title(title_id),
+    episode_id    INTEGER REFERENCES dim_episode(episode_id),  -- NULL for movies
     date_id       INTEGER NOT NULL REFERENCES dim_date(date_id),
     watch_seconds INTEGER NOT NULL,        -- additive measure
-    completion    REAL    NOT NULL,        -- fraction 0..1 of the title watched
+    completion    REAL    NOT NULL,        -- fraction 0..1 of the movie or episode watched
     completed     INTEGER NOT NULL,        -- 1 if completion >= 0.9
     device        TEXT,                    -- TV | Mobile | Web | Tablet
     event_ts      TEXT NOT NULL
@@ -100,6 +113,8 @@ CREATE TABLE IF NOT EXISTS my_list (
 CREATE INDEX IF NOT EXISTS ix_watch_profile ON fact_watch_event(profile_id);
 CREATE INDEX IF NOT EXISTS ix_watch_title   ON fact_watch_event(title_id);
 CREATE INDEX IF NOT EXISTS ix_watch_date    ON fact_watch_event(date_id);
+CREATE INDEX IF NOT EXISTS ix_watch_episode ON fact_watch_event(episode_id);
+CREATE INDEX IF NOT EXISTS ix_episode_title ON dim_episode(title_id);
 CREATE INDEX IF NOT EXISTS ix_rating_profile ON fact_rating(profile_id);
 CREATE INDEX IF NOT EXISTS ix_rating_title   ON fact_rating(title_id);
 CREATE INDEX IF NOT EXISTS ix_btg_genre      ON bridge_title_genre(genre_id);

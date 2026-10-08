@@ -27,17 +27,17 @@ def _ensure_date(conn, ts: str) -> int:
 
 
 def record_watch(profile_id: int, title_id: int, watch_seconds: int,
-                 completion: float, device: str = "Web") -> dict:
+                 completion: float, device: str = "Web", episode_id: int | None = None) -> dict:
     ts = datetime.now().isoformat(timespec="seconds")
     completion = max(0.0, min(1.0, float(completion)))
     conn = _conn()
     try:
         date_id = _ensure_date(conn, ts)
         cur = conn.execute(
-            """INSERT INTO fact_watch_event
-               (profile_id,title_id,date_id,watch_seconds,completion,completed,device,event_ts)
-               VALUES (?,?,?,?,?,?,?,?)""",
-            (profile_id, title_id, date_id, int(watch_seconds), completion,
+            """INSERT INTO fact_watch_event (profile_id,title_id,episode_id,date_id,
+               watch_seconds,completion,completed,device,event_ts)
+               VALUES (?,?,?,?,?,?,?,?,?)""",
+            (profile_id, title_id, episode_id, date_id, int(watch_seconds), completion,
              1 if completion >= 0.9 else 0, device, ts))
         conn.commit()
         return {"event_id": cur.lastrowid, "completion": completion}
@@ -99,23 +99,36 @@ def get_list(profile_id: int) -> list[int]:
 def get_continue_watching(profile_id: int, limit: int = 18) -> list[dict]:
     """Titles the profile started but didn't finish, most recent first.
 
-    Uses the latest watch event per title; keeps it if the latest completion is
-    between 5% and 90% (started, not finished). Returns title_id + resume pct.
+    Looks at the latest watch event per title. A film stays if it stopped
+    between 5% and 90%. A series stays while something is left to watch: the
+    episode it stopped partway through, or the one after a finished episode.
+    Returns title_id + resume %, plus the episode for a series.
     """
+    from backend import episodes
     conn = _conn()
     try:
         rows = conn.execute(
-            "SELECT title_id, completion FROM fact_watch_event "
-            "WHERE profile_id=? ORDER BY event_ts DESC", (profile_id,)).fetchall()
+            "SELECT title_id, episode_id, completion FROM fact_watch_event "
+            "WHERE profile_id=? ORDER BY event_ts DESC, event_id DESC", (profile_id,)).fetchall()
     finally:
         conn.close()
     out, seen = [], set()
-    for title_id, completion in rows:
+    for title_id, episode_id, completion in rows:
         if title_id in seen:
             continue
         seen.add(title_id)
-        if 0.05 < completion < 0.9:
-            out.append({"title_id": title_id, "progress": round(completion * 100)})
+        if episode_id is None:
+            if 0.05 < completion < 0.9:
+                out.append({"title_id": title_id, "progress": round(completion * 100)})
+        else:
+            ep = episodes.get(episode_id)
+            if completion >= 0.9:
+                ep, completion = episodes.next_after(ep), 0.0  # finished: the next one is up
+            elif completion <= 0.05 and ep["season_number"] == ep["episode_number"] == 1:
+                ep = None  # only peeked at the first episode
+            if ep:
+                out.append({"title_id": title_id, "progress": round(completion * 100),
+                            "episode_id": ep["episode_id"], "episode_label": episodes.label(ep)})
         if len(out) >= limit:
             break
     return out

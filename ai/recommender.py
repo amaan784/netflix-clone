@@ -68,15 +68,15 @@ class RecommenderService:
 
     def _compute_popularity(self):
         ev = self.frames["events"]
+        pop = data_access.popularity_scores(ev)
+        self.popularity = dict(zip(pop["title_id"], pop["score"]))
+        # what the detail view shows
         agg = ev.groupby("title_id").agg(
-            views=("title_id", "size"),
             viewers=("profile_id", "nunique"),
             hours=("watch_seconds", lambda s: s.sum() / 3600.0),
-            avg_completion=("completion", "mean")).reset_index()
-        # popularity = blend of reach and engagement
-        score = (np.log1p(agg["viewers"]) * 0.6 + np.log1p(agg["hours"]) * 0.4)
-        self.popularity = dict(zip(agg["title_id"], score))
-        self._pop_stats = agg.set_index("title_id").to_dict("index")
+            avg_completion=("completion", "mean"))
+        agg["views"] = pop.set_index("title_id")["views"]
+        self._pop_stats = agg.to_dict("index")
 
     def _build_watched_state(self):
         self.watched = {}

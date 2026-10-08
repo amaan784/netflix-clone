@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
+import numpy as np
 import pandas as pd
 
 from paths import DB_PATH
@@ -23,7 +24,7 @@ def load_frames() -> dict:
             FROM bridge_title_genre b JOIN dim_genre g ON b.genre_id = g.genre_id
         """, conn)
         events = pd.read_sql_query("""
-            SELECT profile_id, title_id, watch_seconds, completion, completed
+            SELECT profile_id, title_id, episode_id, watch_seconds, completion, completed
             FROM fact_watch_event
         """, conn)
         ratings = pd.read_sql_query(
@@ -54,10 +55,34 @@ def load_frames() -> dict:
     }
 
 
+# An episode is a fraction of a show: six watched to the end count like one
+# film, so a long binge doesn't drown out the films a profile chose.
+EPISODES_PER_FILM = 6
+
+
+def film_units(events: pd.DataFrame) -> pd.Series:
+    """How much of a film each event amounts to: its completion for a film,
+    a sixth of that for an episode."""
+    units = events["completion"]
+    if "episode_id" in events:
+        units = units.where(events["episode_id"].isna(), units / EPISODES_PER_FILM)
+    return units
+
+
+def popularity_scores(events: pd.DataFrame) -> pd.DataFrame:
+    """Per-title popularity: reach (unique viewers) blended with views counted in
+    film-sized units. Like Netflix's own "views" (hours / runtime), this stops
+    long shows winning on raw watch hours alone."""
+    agg = (events.assign(units=film_units(events)).groupby("title_id")
+           .agg(viewers=("profile_id", "nunique"), views=("units", "sum")).reset_index())
+    agg["score"] = np.log1p(agg["viewers"]) * 0.6 + np.log1p(agg["views"]) * 0.4
+    return agg
+
+
 def build_interactions(events: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
     """Collapse events and ratings into one affinity score per (profile_id, title_id)."""
     # watch signal: accumulate completion across sessions (rewatch => stronger)
-    watch = (events.groupby(["profile_id", "title_id"])["completion"]
+    watch = (events.assign(units=film_units(events)).groupby(["profile_id", "title_id"])["units"]
              .sum().clip(upper=3.0).reset_index(name="watch_signal"))
 
     # rating signal: centre on 3 -> [-2, +2]

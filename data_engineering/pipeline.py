@@ -15,7 +15,11 @@ from datetime import date, datetime
 from paths import DB_PATH, SCHEMA_PATH, LOG_DIR
 from data_engineering.catalog_seed import CATALOG
 from data_engineering import generate_data
-from data_engineering import data_quality
+from data_engineering import data_quality, tmdb
+
+# Stored in the database (PRAGMA user_version). Bump it whenever schema.sql
+# changes, and existing warehouses get rebuilt on the next start.
+SCHEMA_VERSION = 2
 
 # log to console and file
 logger = logging.getLogger("etl")
@@ -82,9 +86,12 @@ def transform(users, profiles, affinities):
 
     genres = [{"genre_id": gid, "genre_name": name} for name, gid in genre_set.items()]
 
-    # events
-    watch_events, ratings = generate_data.generate_events(profiles, affinities, title_index)
-    logger.info("[TRANSFORM] %d watch events, %d ratings", len(watch_events), len(ratings))
+    # episodes, then events (series events point at the episode watched)
+    episodes = generate_data.generate_episodes(title_index)
+    watch_events, ratings = generate_data.generate_events(profiles, affinities, title_index,
+                                                          episodes)
+    logger.info("[TRANSFORM] %d episodes, %d watch events, %d ratings",
+                len(episodes), len(watch_events), len(ratings))
 
     # date dimension, built from every event/rating date
     date_keys = set()
@@ -111,7 +118,7 @@ def transform(users, profiles, affinities):
         r["date_id"] = int(r["rated_ts"][:10].replace("-", ""))
 
     return {
-        "titles": titles, "genres": genres, "bridge": bridge,
+        "titles": titles, "genres": genres, "bridge": bridge, "episodes": episodes,
         "users": users, "profiles": profiles,
         "watch_events": watch_events, "ratings": ratings, "dim_dates": dim_dates,
     }
@@ -123,7 +130,7 @@ def load(data: dict, conn: sqlite3.Connection):
     cur = conn.cursor()
 
     # rebuild analytical tables
-    for tbl in ["fact_rating", "fact_watch_event", "bridge_title_genre",
+    for tbl in ["fact_rating", "fact_watch_event", "bridge_title_genre", "dim_episode",
                 "dim_profile", "dim_user", "dim_genre", "dim_date", "dim_title"]:
         cur.execute(f"DROP TABLE IF EXISTS {tbl}")
     # my_list is preserved across reloads (operational data)
@@ -145,6 +152,11 @@ def load(data: dict, conn: sqlite3.Connection):
     cur.executemany("INSERT INTO bridge_title_genre (title_id,genre_id) VALUES (?,?)",
                     data["bridge"])
     cur.executemany(
+        """INSERT INTO dim_episode (episode_id,title_id,season_number,episode_number,
+            episode_title,runtime_minutes,synopsis)
+           VALUES (:episode_id,:title_id,:season_number,:episode_number,
+            :episode_title,:runtime_minutes,:synopsis)""", data["episodes"])
+    cur.executemany(
         """INSERT INTO dim_user (user_id,full_name,email,country,plan,signup_date,is_synthetic)
            VALUES (:user_id,:full_name,:email,:country,:plan,:signup_date,:is_synthetic)""",
         data["users"])
@@ -157,20 +169,22 @@ def load(data: dict, conn: sqlite3.Connection):
            VALUES (:date_id,:cal_date,:year,:month,:day,:weekday,:is_weekend)""",
         data["dim_dates"])
     cur.executemany(
-        """INSERT INTO fact_watch_event (event_id,profile_id,title_id,date_id,watch_seconds,
-            completion,completed,device,event_ts)
-           VALUES (:event_id,:profile_id,:title_id,:date_id,:watch_seconds,
-            :completion,:completed,:device,:event_ts)""", data["watch_events"])
+        """INSERT INTO fact_watch_event (event_id,profile_id,title_id,episode_id,date_id,
+            watch_seconds,completion,completed,device,event_ts)
+           VALUES (:event_id,:profile_id,:title_id,:episode_id,:date_id,
+            :watch_seconds,:completion,:completed,:device,:event_ts)""", data["watch_events"])
     cur.executemany(
         """INSERT INTO fact_rating (rating_id,profile_id,title_id,date_id,rating,rated_ts)
            VALUES (:rating_id,:profile_id,:title_id,:date_id,:rating,:rated_ts)""",
         data["ratings"])
 
+    conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
-    logger.info("[LOAD] Inserted %d titles, %d genres, %d users, %d profiles, "
+    logger.info("[LOAD] Inserted %d titles, %d episodes, %d genres, %d users, %d profiles, "
                 "%d watch events, %d ratings",
-                len(data["titles"]), len(data["genres"]), len(data["users"]),
-                len(data["profiles"]), len(data["watch_events"]), len(data["ratings"]))
+                len(data["titles"]), len(data["episodes"]), len(data["genres"]),
+                len(data["users"]), len(data["profiles"]), len(data["watch_events"]),
+                len(data["ratings"]))
 
 
 # orchestration
@@ -186,6 +200,9 @@ def run_pipeline(verbose: bool = True) -> dict:
     conn = sqlite3.connect(DB_PATH)
     try:
         load(data, conn)
+        named = tmdb.enrich_warehouse(conn)  # no-op until data_engineering.tmdb has run
+        if named:
+            logger.info("[ENRICH] %d episode names and synopses from the TMDB cache", named)
         logger.info("[VALIDATE] Running data-quality checks")
         report = data_quality.run_all_checks(conn)
         for check in report["checks"]:
@@ -207,7 +224,9 @@ def warehouse_ready() -> bool:
     try:
         conn = sqlite3.connect(DB_PATH)
         try:
-            return conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0] > 0
+            version = conn.execute("PRAGMA user_version").fetchone()[0]
+            return (version == SCHEMA_VERSION
+                    and conn.execute("SELECT COUNT(*) FROM dim_title").fetchone()[0] > 0)
         finally:
             conn.close()
     except sqlite3.Error:
@@ -215,7 +234,8 @@ def warehouse_ready() -> bool:
 
 
 def ensure_warehouse():
-    """Build the warehouse unless it's already there (first run, or data/ was deleted)."""
+    """Build the warehouse unless it's already there and current: first run, a
+    deleted data/ folder, or a database from before the latest schema change."""
     if not warehouse_ready():
         run_pipeline()
 

@@ -203,25 +203,122 @@ a { cursor: pointer; }
 .detail-section-title { padding: 6px 32px; font-size: 18px; font-weight: 700; }
 
 /* player */
-.player-modal { align-items: center; padding: 0; background: rgba(0,0,0,.95); }
-.player { width: 100%; height: 100%; display: flex; flex-direction: column; }
-.player-stage { flex: 1; position: relative; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.player-modal { align-items: stretch; padding: 0; background: #000; }
+.player { position: relative; width: 100%; height: 100%; background: #000; overflow: hidden; }
+.player.idle { cursor: none; }
+.player-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
+.subtitles { position: absolute; left: 5%; right: 5%; bottom: 7%; z-index: 2; text-align: center;
+  pointer-events: none; transition: bottom .3s; white-space: pre-line;
+  font-size: clamp(16px, 2.4vw, 38px); font-weight: 600; line-height: 1.3;
+  text-shadow: 0 0 4px #000, 0 2px 8px rgba(0,0,0,.9); }
+.player:not(.idle) .subtitles { bottom: 130px; }  /* clear of the control bar */
+.sim-stage { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
 .player-glow { position: absolute; width: 70vmin; height: 70vmin; border-radius: 50%;
   background: radial-gradient(circle, rgba(229,9,20,.35), transparent 70%); animation: pulse 3s infinite; }
 @keyframes pulse { 0%,100% { transform: scale(1); opacity: .6; } 50% { transform: scale(1.15); opacity: 1; } }
-.player-title { position: relative; z-index: 2; font-size: 52px; font-weight: 900; text-align: center; padding: 0 20px; }
-.player-badge { position: absolute; top: 24px; left: 24px; color: var(--red); font-weight: 800; letter-spacing: 2px; }
-.player-controls { display: flex; align-items: center; gap: 16px; padding: 18px 32px; background: #0a0a0a; }
-.player-controls button { background: none; border: none; color: #fff; font-size: 22px; }
-.player-progress { flex: 1; height: 5px; background: #444; border-radius: 3px; overflow: hidden; }
-.player-bar-fill { height: 100%; width: 0; background: var(--red); transition: width .2s linear; }
-.player-time { color: #ccc; font-size: 13px; min-width: 40px; }
-.player-close { font-size: 15px !important; color: #ccc !important; }
-.player-video { position: absolute; inset: 0; width: 100%; height: 100%; background: #000; }
-.player-credit { position: absolute; top: 20px; right: 24px; z-index: 3; max-width: 60%;
-  text-align: right; color: #ccc; font-size: 12px; text-shadow: 0 1px 3px #000; }
-.player-quality { margin-left: auto; background: #1c1c24; color: #ddd; border: 1px solid #34343e;
-  border-radius: 4px; padding: 4px 8px; font-size: 13px; }
+.sim-title { position: relative; font-size: 52px; font-weight: 900; text-align: center; padding: 0 20px; }
+
+/* top and bottom bars fade out while playing with the mouse still */
+.player-top, .player-bottom { position: absolute; left: 0; right: 0; z-index: 3; transition: opacity .3s; }
+.player.idle .player-top, .player.idle .player-bottom { opacity: 0; pointer-events: none; }
+.player-top { top: 0; display: flex; align-items: flex-start; gap: 14px; padding: 18px 24px 40px;
+  background: linear-gradient(180deg, rgba(0,0,0,.75), rgba(0,0,0,0)); }
+.player-heading { flex: 1; min-width: 0; }
+.player-title { font-size: 20px; font-weight: 800; }
+.player-episode { color: #ccc; font-size: 14px; margin-top: 2px; white-space: pre; }
+.player-credit { max-width: 40%; text-align: right; color: #aaa; font-size: 12px; text-shadow: 0 1px 3px #000; }
+.player-bottom { bottom: 0; padding: 50px 24px 14px;
+  background: linear-gradient(0deg, rgba(0,0,0,.85), rgba(0,0,0,0)); }
+.player-controls { display: flex; align-items: center; gap: 10px; }
+.pc-btn { background: none; border: none; color: #fff; width: 42px; height: 42px; padding: 7px;
+  display: inline-flex; align-items: center; justify-content: center; border-radius: 50%; }
+.pc-btn:hover { background: rgba(255,255,255,.12); }
+.pc-btn svg { width: 100%; height: 100%; fill: currentColor; }
+.pc-btn.on { color: var(--red); }
+.pc-next { width: auto; border-radius: 6px; gap: 6px; padding: 7px 12px; font-size: 14px; font-weight: 600; }
+.pc-next svg { width: 22px; height: 22px; }
+.pc-volume { width: 90px; accent-color: var(--red); }
+.pc-time { color: #ddd; font-size: 14px; margin-left: 6px; font-variant-numeric: tabular-nums; }
+.pc-spacer { flex: 1; }
+.player-quality { background: rgba(28,28,36,.9); color: #ddd; border: 1px solid #34343e;
+  border-radius: 4px; padding: 5px 8px; font-size: 13px; }
+.pc-menu-wrap { position: relative; }
+.pc-menu { position: absolute; bottom: 50px; right: 0; min-width: 190px; background: rgba(20,20,24,.97);
+  border: 1px solid #2c2c35; border-radius: 6px; padding: 6px 0; }
+.pc-menu button { display: block; width: 100%; text-align: left; background: none; border: none;
+  color: #ccc; padding: 8px 16px 8px 30px; font-size: 14px; position: relative; }
+.pc-menu button:hover { background: rgba(255,255,255,.08); color: #fff; }
+.pc-menu button.active { color: #fff; font-weight: 700; }
+.pc-menu button.active::before { content: "✓"; position: absolute; left: 11px; }
+
+/* seek bar: a thin track that thickens on hover, with a preview frame above it */
+.seek { position: relative; height: 18px; display: flex; align-items: center; cursor: pointer;
+  margin-bottom: 4px; touch-action: none; }
+.seek-track { position: relative; width: 100%; height: 4px; background: rgba(255,255,255,.25);
+  border-radius: 2px; transition: height .15s; }
+.seek:hover .seek-track { height: 7px; }
+.seek-buffered, .seek-played { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 2px; }
+.seek-buffered { background: rgba(255,255,255,.35); }
+.seek-played { background: var(--red); }
+.seek-knob { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; left: 0;
+  background: var(--red); border-radius: 50%; transform: scale(0); transition: transform .15s; }
+.seek:hover .seek-knob { transform: scale(1); }
+.seek-preview { position: absolute; bottom: 24px; transform: translateX(-50%); display: flex;
+  flex-direction: column; align-items: center; gap: 4px; pointer-events: none; }
+.seek-thumb { border: 2px solid #fff; border-radius: 3px; background-repeat: no-repeat; background-color: #111; }
+.seek-time { font-size: 13px; font-weight: 600; text-shadow: 0 1px 3px #000; }
+
+.skip-intro { position: absolute; right: 40px; bottom: 120px; z-index: 4; padding: 12px 26px;
+  background: rgba(30,30,36,.75); color: #fff; border: 2px solid rgba(255,255,255,.8);
+  border-radius: 4px; font-size: 17px; font-weight: 700; }
+.skip-intro:hover { background: #fff; color: #000; }
+.up-next { position: absolute; right: 40px; bottom: 120px; z-index: 4; width: 340px; padding: 16px;
+  background: rgba(16,16,20,.94); border: 1px solid #2c2c35; border-radius: 8px; }
+.un-label { color: #aaa; font-size: 12px; letter-spacing: 1px; text-transform: uppercase; }
+.un-title { font-weight: 700; margin: 4px 0 12px; }
+.un-btns { display: flex; gap: 8px; }
+.un-btns button { flex: 1; border: none; border-radius: 4px; padding: 10px; font-weight: 700; font-size: 14px; }
+.un-play { position: relative; overflow: hidden; background: rgba(255,255,255,.35); color: #000; }
+.un-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: #fff; }
+.un-text { position: relative; display: inline-flex; align-items: center; gap: 6px; }
+.un-text svg { width: 16px; height: 16px; fill: currentColor; }
+.un-stay { background: rgba(109,109,110,.6); color: #fff; }
+
+/* hero preview */
+.hero-bg img { transition: opacity .8s; }
+.hero-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover;
+  opacity: 0; transition: opacity .8s; }
+.hero.previewing .hero-video { opacity: 1; }
+.hero.previewing .hero-bg img { opacity: 0; }
+.hero-mute { position: absolute; right: 4vw; bottom: 90px; z-index: 3; width: 44px; height: 44px;
+  padding: 10px; border-radius: 50%; border: 1px solid rgba(255,255,255,.7);
+  background: rgba(0,0,0,.35); color: #fff; }
+.hero-mute svg { width: 100%; height: 100%; fill: currentColor; }
+
+/* episodes, in the detail view */
+.episodes { padding: 4px 32px 18px; }
+.ep-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.ep-head h3 { font-size: 20px; }
+.ep-season { background: #242424; color: #fff; border: 1px solid #4d4d4d; border-radius: 4px;
+  padding: 8px 12px; font-size: 15px; font-weight: 600; }
+.ep-one { color: var(--muted); }
+.ep-list { display: flex; flex-direction: column; }
+.ep { display: flex; align-items: center; gap: 16px; padding: 14px 12px; border-top: 1px solid #2a2a2a;
+  border-radius: 6px; cursor: pointer; }
+.ep:hover, .ep.current { background: #232323; }
+.ep-num { width: 24px; text-align: center; color: #d2d2d2; font-size: 22px; }
+.ep-thumb { position: relative; flex: 0 0 auto; width: 150px; height: 84px; border-radius: 4px; overflow: hidden;
+  background: #1c1c22; }
+.ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ep-play { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  font-size: 26px; opacity: 0; background: rgba(0,0,0,.35); transition: opacity .2s; }
+.ep:hover .ep-play { opacity: 1; }
+.ep-thumb .card-progress { left: 0; right: 0; bottom: 0; border-radius: 0; height: 4px; }
+.ep-info { flex: 1; min-width: 0; }
+.ep-top { display: flex; justify-content: space-between; gap: 12px; font-weight: 600; }
+.ep-len { color: #bbb; font-weight: 400; }
+.ep-syn { color: #aaa; font-size: 13px; line-height: 1.45; margin-top: 4px;
+  display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 
 /* assistant */
 .assistant-panel {
@@ -282,4 +379,10 @@ a { cursor: pointer; }
   .search-box input { width: 130px; }
   .hero-title { font-size: 36px; }
   .detail-body { grid-template-columns: 1fr; }
+  .pc-volume, #pc-back10, #pc-fwd10, .player-credit { display: none; }
+  .pc-next span { display: none; }
+  .skip-intro, .up-next { right: 16px; bottom: 100px; }
+  .up-next { width: calc(100% - 32px); }
+  .episodes { padding: 4px 16px 18px; }
+  .ep-thumb { width: 112px; height: 63px; }
 }

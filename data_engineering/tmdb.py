@@ -1,11 +1,14 @@
 """
-Real poster, banner and title-logo art for the catalog, from TMDB.
+Real poster, banner and title-logo art for the catalog, plus episode names,
+synopses and stills, from TMDB.
 
 TMDB (themoviedb.org) has a free API. Put your key in TMDB_API_KEY, or in a .env
 file at the project root (see .env.example). Every catalog title is matched by
 name, year and type, and its images are saved under data/tmdb/. The app serves
 them from there, so one run is enough and everything works offline afterwards.
-Titles without a match keep their generated SVG poster.
+Titles without a match keep their generated SVG poster. Episode names and
+synopses are copied into the warehouse's dim_episode table (and again by the
+ETL whenever it rebuilds).
 
     python -m data_engineering.tmdb             # fetch whatever is missing
     python -m data_engineering.tmdb --refresh   # match and download everything again
@@ -32,7 +35,7 @@ from paths import DB_PATH, ROOT, TMDB_DIR
 
 API = "https://api.themoviedb.org/3"
 IMAGES = "https://image.tmdb.org/t/p"
-SIZES = {"poster": "w500", "backdrop": "w1280", "logo": "w500"}
+SIZES = {"poster": "w500", "backdrop": "w1280", "logo": "w500", "still": "w300"}
 ATTRIBUTION = "This product uses the TMDB API but is not endorsed or certified by TMDB."
 UA = "NetClone/1.0 (local demo)"
 
@@ -172,23 +175,76 @@ def fetch_title(client: TMDB, t: dict, out: Path, cached: dict | None, refresh: 
         if not remote:
             continue
         local = f"{kind}/{t['title_id']}{Path(remote).suffix or '.jpg'}"
-        if refresh or not (out / local).exists():
-            try:
-                _save(out / local, client.image(remote, SIZES[kind]))
-            except urllib.error.HTTPError:
-                continue  # an image TMDB has since removed; the SVG fallback covers it
-        entry[kind] = local
+        if _download(client, remote, kind, out / local, refresh):
+            entry[kind] = local
+    if t.get("seasons"):
+        fetch_episodes(client, t, entry, out, refresh)
     return entry
+
+
+def _download(client: TMDB, remote: str, kind: str, dest: Path, refresh: bool) -> bool:
+    if dest.exists() and not refresh:
+        return True
+    try:
+        _save(dest, client.image(remote, SIZES[kind]))
+        return True
+    except urllib.error.HTTPError:
+        return False  # an image TMDB has since removed; the app falls back to SVG
+
+
+def fetch_episodes(client: TMDB, t: dict, entry: dict, out: Path, refresh: bool):
+    """Names, synopses and stills for a series' episodes, one season at a time.
+    Seasons already fetched are skipped unless refreshing."""
+    eps = {} if refresh else dict(entry.get("episodes", {}))
+    for season in range(1, t["seasons"] + 1):
+        if any(key.startswith(f"{season}x") for key in eps):
+            continue
+        try:
+            data = client.get(f"/tv/{entry['tmdb_id']}/season/{season}")
+        except urllib.error.HTTPError:
+            continue  # TMDB splits this show's seasons differently
+        for ep in data.get("episodes", []):
+            key = f"{season}x{ep['episode_number']}"
+            item = {"name": ep.get("name"), "overview": ep.get("overview") or None}
+            if ep.get("still_path"):
+                local = f"still/{t['title_id']}/{key}{Path(ep['still_path']).suffix or '.jpg'}"
+                if _download(client, ep["still_path"], "still", out / local, refresh):
+                    item["still"] = local
+            eps[key] = item
+    entry["episodes"] = eps
+
+
+def enrich_warehouse(conn: sqlite3.Connection, manifest: dict | None = None) -> int:
+    """Copy fetched episode names and synopses into dim_episode. Returns the number
+    of episodes updated; episodes TMDB doesn't know keep "Episode N"."""
+    manifest = manifest if manifest is not None else load_manifest()
+    rows = []
+    for tid, entry in manifest["titles"].items():
+        for key, ep in entry.get("episodes", {}).items():
+            season, number = map(int, key.split("x"))
+            if ep.get("name"):
+                rows.append((ep["name"], ep.get("overview"), int(tid), season, number, entry["title"]))
+    if not rows:
+        return 0
+    cur = conn.executemany(
+        """UPDATE dim_episode SET episode_title = ?, synopsis = ?
+           WHERE title_id = ? AND season_number = ? AND episode_number = ?
+             AND title_id IN (SELECT title_id FROM dim_title WHERE title = ?)""", rows)
+    conn.commit()
+    return cur.rowcount
 
 
 def catalog_titles() -> list[dict]:
     conn = sqlite3.connect(DB_PATH)
     try:
-        rows = conn.execute("SELECT title_id, title, content_type, release_year "
-                            "FROM dim_title ORDER BY title_id").fetchall()
+        rows = conn.execute("""
+            SELECT t.title_id, t.title, t.content_type, t.release_year, MAX(e.season_number)
+            FROM dim_title t LEFT JOIN dim_episode e ON e.title_id = t.title_id
+            GROUP BY t.title_id ORDER BY t.title_id""").fetchall()
     finally:
         conn.close()
-    return [{"title_id": r[0], "title": r[1], "content_type": r[2], "year": r[3]} for r in rows]
+    return [{"title_id": r[0], "title": r[1], "content_type": r[2], "year": r[3],
+             "seasons": r[4] or 0} for r in rows]
 
 
 def load_manifest(root=None) -> dict:
@@ -244,11 +300,19 @@ def main():
         sys.exit(str(e))
     except urllib.error.URLError as e:
         sys.exit(f"Couldn't reach TMDB ({e.reason}). Check your internet connection.")
+    conn = sqlite3.connect(DB_PATH)
+    try:
+        named = enrich_warehouse(conn, manifest)
+    finally:
+        conn.close()
     titles = manifest["titles"].values()
+    eps = [e for t in titles for e in t.get("episodes", {}).values()]
     print(f"\n{len(manifest['titles'])} titles matched, {len(manifest['unmatched'])} without a match. "
           f"Posters: {sum(1 for t in titles if t.get('poster'))}, "
           f"banners: {sum(1 for t in titles if t.get('backdrop'))}, "
-          f"logos: {sum(1 for t in titles if t.get('logo'))}.")
+          f"logos: {sum(1 for t in titles if t.get('logo'))}, "
+          f"episode stills: {sum(1 for e in eps if e.get('still'))}.")
+    print(f"{named} episodes in the warehouse now have their real names.")
     print(ATTRIBUTION)
 
 

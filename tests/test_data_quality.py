@@ -12,4 +12,4 @@ def test_all_quality_checks_pass():
         conn.close()
     failed = [c["name"] for c in report["checks"] if not c["passed"]]
     assert report["all_passed"], f"failed checks: {failed}"
-    assert report["total"] >= 13
+    assert report["total"] >= 19

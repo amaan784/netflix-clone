@@ -34,4 +34,5 @@ const API = {
   posterUrl: (id, w = 300, h = 450) => `/api/poster/${id}?w=${w}&h=${h}&v=${API.artVersion}`,
   backdropUrl: (id, w = 1280, h = 720) => `/api/backdrop/${id}?w=${w}&h=${h}&v=${API.artVersion}`,
   logoUrl: (id) => `/api/logo/${id}?v=${API.artVersion}`,
+  stillUrl: (episodeId) => `/api/still/${episodeId}?v=${API.artVersion}`,
 };

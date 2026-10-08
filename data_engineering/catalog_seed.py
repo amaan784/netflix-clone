@@ -3,10 +3,12 @@
 # type: "movie" | "series"
 # maturity: TV/MPAA-style rating
 # runtime: minutes per movie, or per-episode average for a series
+# seasons: episodes in each season (as of mid-2024), series only
 CATALOG = [
     {
         "title": "Stranger Things", "type": "series", "year": 2016, "maturity": "TV-14",
         "runtime": 51, "imdb": 8.7, "country": "USA", "language": "English",
+        "seasons": [8, 9, 8, 9],
         "genres": ["Sci-Fi", "Horror", "Drama", "Mystery"],
         "director": "The Duffer Brothers",
         "cast": ["Millie Bobby Brown", "Finn Wolfhard", "Winona Ryder", "David Harbour"],
@@ -16,6 +18,7 @@ CATALOG = [
     {
         "title": "Breaking Bad", "type": "series", "year": 2008, "maturity": "TV-MA",
         "runtime": 49, "imdb": 9.5, "country": "USA", "language": "English",
+        "seasons": [7, 13, 13, 13, 16],
         "genres": ["Crime", "Drama", "Thriller"],
         "director": "Vince Gilligan",
         "cast": ["Bryan Cranston", "Aaron Paul", "Anna Gunn"],
@@ -25,6 +28,7 @@ CATALOG = [
     {
         "title": "The Crown", "type": "series", "year": 2016, "maturity": "TV-MA",
         "runtime": 58, "imdb": 8.6, "country": "UK", "language": "English",
+        "seasons": [10, 10, 10, 10, 10, 10],
         "genres": ["Drama", "History", "Biography"],
         "director": "Peter Morgan",
         "cast": ["Claire Foy", "Olivia Colman", "Matt Smith"],
@@ -34,6 +38,7 @@ CATALOG = [
     {
         "title": "Money Heist", "type": "series", "year": 2017, "maturity": "TV-MA",
         "runtime": 50, "imdb": 8.2, "country": "Spain", "language": "Spanish",
+        "seasons": [13, 9, 8, 8, 10],
         "genres": ["Crime", "Thriller", "Action"],
         "director": "Álex Pina",
         "cast": ["Úrsula Corberó", "Álvaro Morte", "Itziar Ituño"],
@@ -43,6 +48,7 @@ CATALOG = [
     {
         "title": "The Witcher", "type": "series", "year": 2019, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.0, "country": "USA", "language": "English",
+        "seasons": [8, 8, 8],
         "genres": ["Fantasy", "Action", "Adventure"],
         "director": "Lauren Schmidt Hissrich",
         "cast": ["Henry Cavill", "Anya Chalotra", "Freya Allan"],
@@ -52,6 +58,7 @@ CATALOG = [
     {
         "title": "Wednesday", "type": "series", "year": 2022, "maturity": "TV-14",
         "runtime": 50, "imdb": 8.1, "country": "USA", "language": "English",
+        "seasons": [8],
         "genres": ["Comedy", "Horror", "Mystery"],
         "director": "Tim Burton",
         "cast": ["Jenna Ortega", "Catherine Zeta-Jones", "Gwendoline Christie"],
@@ -61,6 +68,7 @@ CATALOG = [
     {
         "title": "Dark", "type": "series", "year": 2017, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.7, "country": "Germany", "language": "German",
+        "seasons": [10, 8, 8],
         "genres": ["Sci-Fi", "Mystery", "Thriller", "Drama"],
         "director": "Baran bo Odar",
         "cast": ["Louis Hofmann", "Lisa Vicari", "Oliver Masucci"],
@@ -70,6 +78,7 @@ CATALOG = [
     {
         "title": "The Queen's Gambit", "type": "series", "year": 2020, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.5, "country": "USA", "language": "English",
+        "seasons": [7],
         "genres": ["Drama"],
         "director": "Scott Frank",
         "cast": ["Anya Taylor-Joy", "Bill Camp", "Marielle Heller"],
@@ -79,6 +88,7 @@ CATALOG = [
     {
         "title": "Squid Game", "type": "series", "year": 2021, "maturity": "TV-MA",
         "runtime": 55, "imdb": 8.0, "country": "South Korea", "language": "Korean",
+        "seasons": [9],
         "genres": ["Thriller", "Drama", "Action", "Mystery"],
         "director": "Hwang Dong-hyuk",
         "cast": ["Lee Jung-jae", "Park Hae-soo", "Jung Ho-yeon"],
@@ -88,6 +98,7 @@ CATALOG = [
     {
         "title": "Peaky Blinders", "type": "series", "year": 2013, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.8, "country": "UK", "language": "English",
+        "seasons": [6, 6, 6, 6, 6, 6],
         "genres": ["Crime", "Drama"],
         "director": "Steven Knight",
         "cast": ["Cillian Murphy", "Paul Anderson", "Helen McCrory"],
@@ -97,6 +108,7 @@ CATALOG = [
     {
         "title": "Black Mirror", "type": "series", "year": 2011, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.7, "country": "UK", "language": "English",
+        "seasons": [3, 3, 6, 6, 3, 5],
         "genres": ["Sci-Fi", "Drama", "Thriller"],
         "director": "Charlie Brooker",
         "cast": ["Various"],
@@ -106,6 +118,7 @@ CATALOG = [
     {
         "title": "Narcos", "type": "series", "year": 2015, "maturity": "TV-MA",
         "runtime": 49, "imdb": 8.8, "country": "USA", "language": "English",
+        "seasons": [10, 10, 10],
         "genres": ["Crime", "Drama", "Biography"],
         "director": "Chris Brancato",
         "cast": ["Wagner Moura", "Pedro Pascal", "Boyd Holbrook"],
@@ -115,6 +128,7 @@ CATALOG = [
     {
         "title": "Ozark", "type": "series", "year": 2017, "maturity": "TV-MA",
         "runtime": 60, "imdb": 8.5, "country": "USA", "language": "English",
+        "seasons": [10, 10, 10, 14],
         "genres": ["Crime", "Drama", "Thriller"],
         "director": "Bill Dubuque",
         "cast": ["Jason Bateman", "Laura Linney", "Julia Garner"],
@@ -124,6 +138,7 @@ CATALOG = [
     {
         "title": "Bridgerton", "type": "series", "year": 2020, "maturity": "TV-MA",
         "runtime": 60, "imdb": 7.3, "country": "USA", "language": "English",
+        "seasons": [8, 8, 8],
         "genres": ["Romance", "Drama"],
         "director": "Chris Van Dusen",
         "cast": ["Phoebe Dynevor", "Regé-Jean Page", "Jonathan Bailey"],
@@ -133,6 +148,7 @@ CATALOG = [
     {
         "title": "The Umbrella Academy", "type": "series", "year": 2019, "maturity": "TV-14",
         "runtime": 55, "imdb": 7.9, "country": "USA", "language": "English",
+        "seasons": [10, 10, 10],
         "genres": ["Action", "Sci-Fi", "Comedy", "Adventure"],
         "director": "Steve Blackman",
         "cast": ["Elliot Page", "Tom Hopper", "Robert Sheehan"],
@@ -142,6 +158,7 @@ CATALOG = [
     {
         "title": "Lupin", "type": "series", "year": 2021, "maturity": "TV-MA",
         "runtime": 50, "imdb": 7.5, "country": "France", "language": "French",
+        "seasons": [5, 5, 7],
         "genres": ["Crime", "Mystery", "Thriller"],
         "director": "George Kay",
         "cast": ["Omar Sy", "Ludivine Sagnier", "Clotilde Hesme"],
@@ -151,6 +168,7 @@ CATALOG = [
     {
         "title": "BoJack Horseman", "type": "series", "year": 2014, "maturity": "TV-MA",
         "runtime": 25, "imdb": 8.8, "country": "USA", "language": "English",
+        "seasons": [12, 12, 12, 12, 12, 16],
         "genres": ["Comedy", "Drama", "Animation"],
         "director": "Raphael Bob-Waksberg",
         "cast": ["Will Arnett", "Amy Sedaris", "Alison Brie"],
@@ -160,6 +178,7 @@ CATALOG = [
     {
         "title": "Sex Education", "type": "series", "year": 2019, "maturity": "TV-MA",
         "runtime": 50, "imdb": 8.3, "country": "UK", "language": "English",
+        "seasons": [8, 8, 8, 8],
         "genres": ["Comedy", "Drama", "Romance"],
         "director": "Laurie Nunn",
         "cast": ["Asa Butterfield", "Gillian Anderson", "Emma Mackey"],
@@ -169,6 +188,7 @@ CATALOG = [
     {
         "title": "The Last Kingdom", "type": "series", "year": 2015, "maturity": "TV-MA",
         "runtime": 55, "imdb": 8.5, "country": "UK", "language": "English",
+        "seasons": [8, 8, 10, 10, 10],
         "genres": ["Action", "Drama", "History"],
         "director": "Stephen Butchard",
         "cast": ["Alexander Dreymon", "Eliza Butterworth", "Ian Hart"],
@@ -178,6 +198,7 @@ CATALOG = [
     {
         "title": "Mindhunter", "type": "series", "year": 2017, "maturity": "TV-MA",
         "runtime": 55, "imdb": 8.6, "country": "USA", "language": "English",
+        "seasons": [10, 9],
         "genres": ["Crime", "Drama", "Thriller"],
         "director": "Joe Penhall",
         "cast": ["Jonathan Groff", "Holt McCallany", "Anna Torv"],
@@ -439,6 +460,7 @@ CATALOG = [
     {
         "title": "Beef", "type": "series", "year": 2023, "maturity": "TV-MA",
         "runtime": 35, "imdb": 8.0, "country": "USA", "language": "English",
+        "seasons": [10],
         "genres": ["Comedy", "Drama", "Thriller"],
         "director": "Lee Sung Jin",
         "cast": ["Steven Yeun", "Ali Wong", "Joseph Lee"],
@@ -448,6 +470,7 @@ CATALOG = [
     {
         "title": "The Diplomat", "type": "series", "year": 2023, "maturity": "TV-MA",
         "runtime": 50, "imdb": 8.0, "country": "USA", "language": "English",
+        "seasons": [8],
         "genres": ["Drama", "Thriller"],
         "director": "Debora Cahn",
         "cast": ["Keri Russell", "Rufus Sewell", "Ato Essandoh"],
@@ -457,6 +480,7 @@ CATALOG = [
     {
         "title": "One Piece", "type": "series", "year": 2023, "maturity": "TV-14",
         "runtime": 60, "imdb": 8.3, "country": "USA", "language": "English",
+        "seasons": [8],
         "genres": ["Action", "Adventure", "Fantasy", "Comedy"],
         "director": "Matt Owens",
         "cast": ["Iñaki Godoy", "Mackenyu", "Emily Rudd"],
@@ -466,6 +490,7 @@ CATALOG = [
     {
         "title": "The Night Agent", "type": "series", "year": 2023, "maturity": "TV-MA",
         "runtime": 50, "imdb": 7.5, "country": "USA", "language": "English",
+        "seasons": [10],
         "genres": ["Action", "Thriller", "Drama"],
         "director": "Shawn Ryan",
         "cast": ["Gabriel Basso", "Luciane Buchanan", "Hong Chau"],
@@ -475,6 +500,7 @@ CATALOG = [
     {
         "title": "Arcane", "type": "series", "year": 2021, "maturity": "TV-14",
         "runtime": 40, "imdb": 9.0, "country": "France", "language": "English",
+        "seasons": [9],
         "genres": ["Animation", "Action", "Adventure", "Sci-Fi", "Fantasy"],
         "director": "Pascal Charrue",
         "cast": ["Hailee Steinfeld", "Ella Purnell", "Kevin Alejandro"],
@@ -484,6 +510,7 @@ CATALOG = [
     {
         "title": "Blood & Water", "type": "series", "year": 2020, "maturity": "TV-MA",
         "runtime": 48, "imdb": 6.4, "country": "South Africa", "language": "English",
+        "seasons": [6, 7, 6],
         "genres": ["Drama", "Mystery"],
         "director": "Nosipho Dumisa",
         "cast": ["Ama Qamata", "Khosi Ngema", "Gail Mabalane"],
@@ -493,6 +520,7 @@ CATALOG = [
     {
         "title": "Kingdom", "type": "series", "year": 2019, "maturity": "TV-MA",
         "runtime": 50, "imdb": 8.3, "country": "South Korea", "language": "Korean",
+        "seasons": [6, 6],
         "genres": ["Horror", "Thriller", "Drama", "History"],
         "director": "Kim Seong-hun",
         "cast": ["Ju Ji-hoon", "Bae Doona", "Ryu Seung-ryong"],
@@ -502,6 +530,7 @@ CATALOG = [
     {
         "title": "Cobra Kai", "type": "series", "year": 2018, "maturity": "TV-14",
         "runtime": 30, "imdb": 8.5, "country": "USA", "language": "English",
+        "seasons": [10, 10, 10, 10, 10],
         "genres": ["Action", "Comedy", "Drama"],
         "director": "Josh Heald",
         "cast": ["Ralph Macchio", "William Zabka", "Xolo Maridueña"],
@@ -511,6 +540,7 @@ CATALOG = [
     {
         "title": "Love, Death & Robots", "type": "series", "year": 2019, "maturity": "TV-MA",
         "runtime": 15, "imdb": 8.4, "country": "USA", "language": "English",
+        "seasons": [18, 8, 9],
         "genres": ["Animation", "Sci-Fi", "Horror", "Comedy"],
         "director": "Tim Miller",
         "cast": ["Various"],
@@ -520,6 +550,7 @@ CATALOG = [
     {
         "title": "Alice in Borderland", "type": "series", "year": 2020, "maturity": "TV-MA",
         "runtime": 50, "imdb": 7.7, "country": "Japan", "language": "Japanese",
+        "seasons": [8, 8],
         "genres": ["Action", "Sci-Fi", "Thriller", "Mystery"],
         "director": "Shinsuke Sato",
         "cast": ["Kento Yamazaki", "Tao Tsuchiya", "Nijiro Murakami"],
@@ -529,6 +560,7 @@ CATALOG = [
     {
         "title": "The Witcher: Blood Origin", "type": "series", "year": 2022, "maturity": "TV-MA",
         "runtime": 50, "imdb": 4.8, "country": "UK", "language": "English",
+        "seasons": [4],
         "genres": ["Fantasy", "Action", "Adventure"],
         "director": "Declan de Barra",
         "cast": ["Sophia Brown", "Laurence O'Fuarain", "Michelle Yeoh"],
@@ -538,6 +570,7 @@ CATALOG = [
     {
         "title": "Heartstopper", "type": "series", "year": 2022, "maturity": "TV-14",
         "runtime": 30, "imdb": 8.6, "country": "UK", "language": "English",
+        "seasons": [8, 8],
         "genres": ["Romance", "Drama", "Comedy"],
         "director": "Euros Lyn",
         "cast": ["Kit Connor", "Joe Locke", "William Gao"],

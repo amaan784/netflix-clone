@@ -38,8 +38,8 @@ def _load_events_ratings():
     conn = sqlite3.connect(DB_PATH)
     try:
         events = pd.read_sql_query(
-            "SELECT profile_id, title_id, watch_seconds, completion, completed, event_ts "
-            "FROM fact_watch_event", conn)
+            "SELECT profile_id, title_id, episode_id, watch_seconds, completion, completed, "
+            "event_ts FROM fact_watch_event", conn)
         ratings = pd.read_sql_query(
             "SELECT profile_id, title_id, rating, rated_ts FROM fact_rating", conn)
     finally:
@@ -50,11 +50,8 @@ def _load_events_ratings():
 def _train_popularity(train_events: pd.DataFrame) -> dict:
     if train_events.empty:
         return {}
-    agg = train_events.groupby("title_id").agg(
-        viewers=("profile_id", "nunique"),
-        hours=("watch_seconds", lambda s: s.sum() / 3600.0)).reset_index()
-    score = np.log1p(agg["viewers"]) * 0.6 + np.log1p(agg["hours"]) * 0.4
-    return dict(zip(agg["title_id"], score))
+    pop = data_access.popularity_scores(train_events)
+    return dict(zip(pop["title_id"], pop["score"]))
 
 
 # metrics (binary relevance)

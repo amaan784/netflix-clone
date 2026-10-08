@@ -93,15 +93,16 @@ def content_type_split(conn):
 
 
 def top_in_country(conn, country, limit=10):
-    """Most-watched titles among viewers in a given country."""
+    """Titles watched by the most viewers in a given country. Counts viewers,
+    not events, so a series isn't ahead just for having more episodes."""
     return _rows(conn, """
-        SELECT t.title_id, t.title, COUNT(*) AS views
+        SELECT t.title_id, t.title, COUNT(DISTINCT f.profile_id) AS viewers
         FROM fact_watch_event f
         JOIN dim_profile p ON f.profile_id = p.profile_id
         JOIN dim_user u ON p.user_id = u.user_id
         JOIN dim_title t ON f.title_id = t.title_id
         WHERE u.country = ?
-        GROUP BY t.title_id ORDER BY views DESC LIMIT ?""", (country, limit))
+        GROUP BY t.title_id ORDER BY viewers DESC, t.title_id LIMIT ?""", (country, limit))
 
 
 def dashboard(conn: sqlite3.Connection) -> dict:

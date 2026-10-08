@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>NetClone</title>
-  <link rel="stylesheet" href="/css/styles.css?v=8" />
+  <link rel="stylesheet" href="/css/styles.css?v=9" />
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90' font-weight='900' fill='%23e50914'>N</text></svg>" />
 </head>
 <body>
@@ -96,20 +96,55 @@
 
   <!-- player modal -->
   <div id="player-modal" class="modal player-modal hidden">
-    <div class="player">
-      <div id="player-stage" class="player-stage">
-        <video id="player-video" class="player-video hidden" controls playsinline></video>
+    <div id="player" class="player">
+      <video id="player-video" class="player-video hidden" playsinline></video>
+      <div id="subtitles" class="subtitles"></div>
+      <!-- simulated playback, when no video has been set up -->
+      <div id="sim-stage" class="sim-stage hidden">
         <div class="player-glow"></div>
-        <div id="player-title" class="player-title"></div>
-        <div class="player-badge">▶ NOW PLAYING</div>
+        <div id="sim-title" class="sim-title"></div>
+      </div>
+
+      <div class="player-top">
+        <button id="player-back" class="pc-btn" title="Back (Esc)"></button>
+        <div class="player-heading">
+          <div id="player-title" class="player-title"></div>
+          <div id="player-episode" class="player-episode"></div>
+        </div>
         <div id="player-credit" class="player-credit"></div>
       </div>
-      <div class="player-controls">
-        <button id="player-playpause">⏸</button>
-        <div class="player-progress"><div id="player-bar" class="player-bar-fill"></div></div>
-        <span id="player-time" class="player-time">0%</span>
-        <select id="player-quality" class="player-quality hidden" title="Quality"></select>
-        <button id="player-close" class="player-close">✕ Close</button>
+
+      <button id="skip-intro" class="skip-intro hidden">Skip Intro</button>
+      <div id="up-next" class="up-next hidden"></div>
+
+      <div class="player-bottom">
+        <div id="seek" class="seek">
+          <div class="seek-track">
+            <div id="seek-buffered" class="seek-buffered"></div>
+            <div id="seek-played" class="seek-played"></div>
+          </div>
+          <div id="seek-knob" class="seek-knob"></div>
+          <div id="seek-preview" class="seek-preview hidden">
+            <div id="seek-thumb" class="seek-thumb"></div>
+            <div id="seek-time" class="seek-time"></div>
+          </div>
+        </div>
+        <div class="player-controls">
+          <button id="pc-play" class="pc-btn" title="Play / pause (Space)"></button>
+          <button id="pc-back10" class="pc-btn" title="Back 10 seconds (Left)"></button>
+          <button id="pc-fwd10" class="pc-btn" title="Forward 10 seconds (Right)"></button>
+          <button id="pc-mute" class="pc-btn" title="Mute (M)"></button>
+          <input id="pc-volume" class="pc-volume" type="range" min="0" max="1" step="0.05" value="1" title="Volume">
+          <span id="pc-time" class="pc-time"></span>
+          <span class="pc-spacer"></span>
+          <button id="pc-next" class="pc-btn pc-next hidden" title="Next episode (N)"></button>
+          <div class="pc-menu-wrap">
+            <button id="pc-cc" class="pc-btn hidden" title="Subtitles (C)"></button>
+            <div id="cc-menu" class="pc-menu hidden"></div>
+          </div>
+          <select id="player-quality" class="player-quality hidden" title="Quality"></select>
+          <button id="pc-full" class="pc-btn" title="Full screen (F)"></button>
+        </div>
       </div>
     </div>
   </div>
@@ -130,9 +165,9 @@
 
   <div id="toast" class="toast hidden"></div>
 
-  <script src="/js/api.js?v=8"></script>
+  <script src="/js/api.js?v=9"></script>
   <script src="/vendor/hls.min.js"></script>
-  <script src="/js/player.js?v=8"></script>
-  <script src="/js/app.js?v=8"></script>
+  <script src="/js/player.js?v=9"></script>
+  <script src="/js/app.js?v=9"></script>
 </body>
 </html>

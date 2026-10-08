@@ -233,9 +233,10 @@ player works offline.
 
 By default every title gets a generated poster (`backend/poster.py`). With a
 free TMDB API key, `python -m data_engineering.tmdb` matches each title by name,
-year and type, and downloads its poster, banner and title logo into
-`data/tmdb/`. The app serves them from there, so after one run everything works
-offline again; titles without a match keep the generated poster.
+year and type, and downloads its poster, banner and title logo, plus episode
+names, synopses and stills for the series, into `data/tmdb/`. The app serves
+them from there, so after one run everything works offline again; titles
+without a match keep the generated poster.
 
 1. Create a free account at https://www.themoviedb.org and request an API key
    (Settings, then API).

@@ -7,7 +7,7 @@ watch/rating events from them. A fixed RNG seed keeps runs reproducible.
 from __future__ import annotations
 
 import random
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 
 from data_engineering.catalog_seed import CATALOG
 
@@ -119,6 +119,27 @@ def generate_population(n_users: int = 280):
     return users, profiles, profile_affinities
 
 
+def generate_episodes(title_index):
+    """One row per episode of every series, numbered within its season. The
+    names are placeholders ("Episode 4") until TMDB data replaces them."""
+    rng = random.Random(SEED + 2)
+    episodes = []
+    for idx, title in enumerate(CATALOG):
+        for season, count in enumerate(title.get("seasons", []), start=1):
+            for number in range(1, count + 1):
+                stretch = 1.15 if number == count else rng.uniform(0.85, 1.1)  # finales run long
+                episodes.append({
+                    "episode_id": len(episodes) + 1,
+                    "title_id": title_index[idx],
+                    "season_number": season,
+                    "episode_number": number,
+                    "episode_title": f"Episode {number}",
+                    "runtime_minutes": max(5, round(title["runtime"] * stretch)),
+                    "synopsis": None,
+                })
+    return episodes
+
+
 def _title_score_for_profile(title, affinity, is_kids):
     """How appealing is a title to a profile, given its genre affinities?"""
     if is_kids and title["maturity"] in ("TV-MA", "R"):
@@ -128,17 +149,24 @@ def _title_score_for_profile(title, affinity, is_kids):
     return max(genre_pull * 0.75 + quality_pull * 0.25, 0.0)
 
 
-def generate_events(profiles, profile_affinities, title_index):
+def generate_events(profiles, profile_affinities, title_index, episodes=()):
     """
     Generate watch + rating fact rows.
 
     `title_index` maps the catalog list position -> assigned title_id so the
-    events reference the same surrogate keys the loader uses.
+    events reference the same surrogate keys the loader uses. A film session is
+    one watch event; a series session is a binge of consecutive episodes, one
+    event each, picking up where the profile left off.
     """
     rng = random.Random(SEED + 1)
+    # episode details draw from their own generator, so the main sequence (and
+    # with it every film event and rating) is the same as before episodes existed
+    ep_rng = random.Random(SEED + 3)
+    by_title = {}
+    for ep in episodes:
+        by_title.setdefault(ep["title_id"], []).append(ep)
     watch_events = []
     ratings = []
-    event_id = 1
     rating_id = 1
 
     today = date(2024, 6, 1)
@@ -168,24 +196,23 @@ def generate_events(profiles, profile_affinities, title_index):
             title_id = title_index[idx]
             appeal = dict(scored)[idx]
 
-            # Watch event(s): higher appeal -> higher completion & repeat views.
+            # Watch sessions: higher appeal -> higher completion & repeat views.
             n_sessions = 1 + (1 if rng.random() < appeal * 0.5 else 0)
+            sessions = []
             for _ in range(n_sessions):
                 completion = min(1.0, max(0.05, rng.gauss(0.55 + appeal * 0.4, 0.25)))
-                runtime = title["runtime"] * (1 if title["type"] == "movie" else rng.randint(2, 10))
-                watch_seconds = int(runtime * 60 * completion)
+                n_episodes = 1 if title["type"] == "movie" else rng.randint(2, 10)
                 ev_date = today - timedelta(days=rng.randint(0, 540))
-                watch_events.append({
-                    "event_id": event_id,
-                    "profile_id": pid,
-                    "title_id": title_id,
-                    "watch_seconds": watch_seconds,
-                    "completion": round(completion, 3),
-                    "completed": 1 if completion >= 0.9 else 0,
-                    "device": rng.choices(DEVICES, weights=[5, 4, 2, 2])[0],
-                    "event_ts": _ts(ev_date, rng),
-                })
-                event_id += 1
+                device = rng.choices(DEVICES, weights=[5, 4, 2, 2])[0]
+                sessions.append((_ts(ev_date, rng), completion, n_episodes, device))
+
+            if title["type"] == "movie":
+                for ts, completion, _, device in sessions:
+                    watch_events.append(_watch_event(
+                        len(watch_events) + 1, pid, title_id, None,
+                        int(title["runtime"] * 60 * completion), completion, device, ts))
+            else:
+                _binge(watch_events, pid, title_id, by_title[title_id], sessions, ep_rng)
 
             # Ratings: profiles rate ~45% of what they watch; rating tracks appeal.
             if rng.random() < 0.45:
@@ -202,6 +229,35 @@ def generate_events(profiles, profile_affinities, title_index):
                 rating_id += 1
 
     return watch_events, ratings
+
+
+def _binge(watch_events, pid, title_id, eps, sessions, rng):
+    """A profile's sessions with one series, oldest first. Each watches its
+    episodes in order; stopping partway through one means the next session
+    starts that episode again."""
+    position = 0
+    for ts, completion, n_episodes, device in sorted(sessions):
+        start = datetime.fromisoformat(ts)
+        for k in range(n_episodes):
+            if position >= len(eps):
+                return  # caught up with every episode that's out
+            ep = eps[position]
+            watched = completion if k == n_episodes - 1 else 1.0
+            watch_events.append(_watch_event(
+                len(watch_events) + 1, pid, title_id, ep["episode_id"],
+                int(ep["runtime_minutes"] * 60 * watched), watched, device,
+                start.isoformat(timespec="seconds")))
+            start += timedelta(minutes=ep["runtime_minutes"] * watched + rng.randint(0, 3))
+            if watched >= 0.9:
+                position += 1
+
+
+def _watch_event(event_id, pid, title_id, episode_id, seconds, completion, device, ts):
+    return {
+        "event_id": event_id, "profile_id": pid, "title_id": title_id, "episode_id": episode_id,
+        "watch_seconds": seconds, "completion": round(completion, 3),
+        "completed": 1 if completion >= 0.9 else 0, "device": device, "event_ts": ts,
+    }
 
 
 def _weighted_sample_without_replacement(rng, items, weights, k):

@@ -1,5 +1,6 @@
 """
-Download the films and cut them into HLS streams at 240p/360p/720p.
+Download the films and cut them into HLS streams at 240p/360p/720p, with
+preview thumbnails, stills and subtitles (media.extras).
 
     python -m media.ingest                   # download and transcode every film
     python -m media.ingest --placeholder     # no download: generated test-pattern clips
@@ -8,7 +9,6 @@ Download the films and cut them into HLS streams at 240p/360p/720p.
 from __future__ import annotations
 
 import argparse
-import json
 import re
 import shutil
 import subprocess
@@ -18,9 +18,9 @@ import urllib.request
 import zipfile
 from pathlib import Path
 
-from media.library import FILMS, LADDER, load_manifest, media_dir
+from media import extras
+from media.library import FILMS, LADDER, UA, load_manifest, media_dir, save_manifest
 
-UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) NetClone-media-ingest/1.0"
 SEGMENT_SECONDS = 4
 VIDEO_EXT = (".mp4", ".m4v", ".mov", ".mkv", ".avi", ".webm")
 
@@ -152,7 +152,7 @@ def run(films=None, placeholder=False, keep_source=False, root=None, seconds=90,
         info = probe(ffmpeg, src)
         log(f"  {info['width']}x{info['height']}, {info['duration'] / 60:.1f} min -> HLS")
         renditions = transcode_hls(ffmpeg, src, hls_dir / film["id"], info)
-        assets[film["id"]] = {
+        asset = assets[film["id"]] = {
             "id": film["id"],
             "title": "Test pattern" if used_placeholder else film["title"],
             "credit": "Placeholder clip generated with ffmpeg" if used_placeholder else film["credit"],
@@ -164,11 +164,12 @@ def run(films=None, placeholder=False, keep_source=False, root=None, seconds=90,
         if not keep_source:
             for f in set(leftovers):
                 f.unlink(missing_ok=True)
+        extras.add_extras(ffmpeg, hls_dir / film["id"], asset, refresh=True, log=log)
 
         # keep the film list order so titles map to the same film on every run
         order = {f["id"]: i for i, f in enumerate(FILMS)}
         manifest = {"assets": sorted(assets.values(), key=lambda a: order.get(a["id"], 99))}
-        (base / "manifest.json").write_text(json.dumps(manifest, indent=2), encoding="utf-8")
+        save_manifest(manifest, base)
         log(f"  done: {', '.join(r['name'] for r in renditions)}")
     return manifest
 

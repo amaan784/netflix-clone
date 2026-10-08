@@ -7,6 +7,9 @@ const state = {
 
 const $ = (sel) => document.querySelector(sel);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
+// for text that comes from outside the catalog (TMDB)
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
 // boot
 async function init() {
@@ -42,6 +45,7 @@ function selectProfile(p) {
 
 // views
 function showView(name) {
+  if (name !== "home") stopHeroPreview();
   ["home", "search", "grid", "analytics"].forEach((v) =>
     $(`#${v}-view`).classList.toggle("hidden", v !== name));
   document.querySelectorAll(".nav-links a").forEach((a) =>
@@ -81,9 +85,71 @@ function renderHero(item) {
         <button class="btn btn-play">▶ Play</button>
         <button class="btn btn-info">ⓘ More Info</button>
       </div>
-    </div>`;
+    </div>
+    <button class="hero-mute hidden" title="Sound on/off"></button>`;
   hero.querySelector(".btn-play").addEventListener("click", () => openPlayer(item));
   hero.querySelector(".btn-info").addEventListener("click", () => openDetail(item.title_id));
+  hero.querySelector(".hero-mute").addEventListener("click", toggleHeroSound);
+  scheduleHeroPreview(item);
+}
+
+// a muted clip plays behind the banner a few seconds after it shows, then
+// fades back to the still (Netflix does the same with trailers)
+const preview = { item: null, hls: null, video: null, timer: null };
+
+function scheduleHeroPreview(item) {
+  stopHeroPreview();
+  preview.item = item;
+  preview.timer = setTimeout(() => startHeroPreview(item), 2500);
+}
+
+async function startHeroPreview(item) {
+  const busy = !$("#player-modal").classList.contains("hidden") || !$("#detail-modal").classList.contains("hidden");
+  if (preview.item !== item || busy || document.hidden || window.scrollY > 200
+      || !(window.Hls && Hls.isSupported())) return;
+  let info;
+  try { info = await API.get(`/api/play/${item.title_id}?profile_id=${state.profile.profile_id}`); }
+  catch (e) { return; }
+  if (preview.item !== item || !info.available || info.placeholder) return;
+
+  const v = document.createElement("video");
+  v.className = "hero-video";
+  v.muted = true;
+  v.playsInline = true;
+  const start = Math.min(info.duration * 0.3, (info.intro ? info.intro[1] : 0) + 45);  // past the titles
+  const hls = new Hls({ startPosition: start, capLevelToPlayerSize: true, maxBufferLength: 20 });
+  Object.assign(preview, { hls, video: v });
+  hls.loadSource(info.src);
+  hls.attachMedia(v);
+  hls.on(Hls.Events.MANIFEST_PARSED, () => v.play().catch(stopHeroPreview));
+  hls.on(Hls.Events.ERROR, (_, d) => { if (d.fatal) stopHeroPreview(); });
+  v.addEventListener("playing", () => {
+    $("#hero").classList.add("previewing");
+    $(".hero-mute").classList.remove("hidden");
+    drawHeroSound();
+  }, { once: true });
+  v.addEventListener("timeupdate", () => { if (v.currentTime > start + 60) stopHeroPreview(); });
+  $("#hero .hero-bg").appendChild(v);
+}
+
+function stopHeroPreview() {
+  clearTimeout(preview.timer);
+  if (preview.hls) { preview.hls.destroy(); preview.hls = null; }
+  if (preview.video) { preview.video.remove(); preview.video = null; }
+  const banner = $("#hero");
+  if (banner) banner.classList.remove("previewing");
+  const mute = $(".hero-mute");
+  if (mute) mute.classList.add("hidden");
+}
+
+function toggleHeroSound() {
+  if (!preview.video) return;
+  preview.video.muted = !preview.video.muted;
+  drawHeroSound();
+}
+
+function drawHeroSound() {
+  $(".hero-mute").innerHTML = preview.video && !preview.video.muted ? ICONS.volume : ICONS.muted;
 }
 
 function renderRow(row) {
@@ -91,29 +157,35 @@ function renderRow(row) {
     <div class="row-track"></div></section>`);
   const track = r.querySelector(".row-track");
   const ranked = row.kind === "trending" || row.kind === "country";
-  row.items.forEach((item, i) => track.appendChild(card(item, { rank: ranked ? i + 1 : null })));
+  // Continue Watching cards pick up playback straight away
+  row.items.forEach((item, i) => track.appendChild(
+    card(item, { rank: ranked ? i + 1 : null, resume: row.kind === "continue" })));
   return r;
 }
 
 function card(item, opts = {}) {
+  const meta = [item.episode_label, `${matchPct(item)}%`, item.release_year, item.genres[0]]
+    .filter(Boolean).join(" · ");
   const c = el(`
     <div class="card">
       <img loading="lazy" src="${API.posterUrl(item.title_id)}" alt="${item.title}">
       ${opts.rank ? `<div class="card-rank">#${opts.rank}</div>` : ""}
       <div class="card-hover">
         <div class="ch-title">${item.title}</div>
-        <div class="ch-meta">${matchPct(item)}% · ${item.release_year} · ${item.genres[0] || ""}</div>
+        <div class="ch-meta">${meta}</div>
       </div>
       ${typeof item.progress === "number" ? `<div class="card-progress"><div class="card-progress-fill" style="width:${item.progress}%"></div></div>` : ""}
     </div>`);
-  c.addEventListener("click", () => openDetail(item.title_id));
+  c.addEventListener("click", () => opts.resume ? openPlayer(item, item.episode_id) : openDetail(item.title_id));
   return c;
 }
 
 // detail modal
 async function openDetail(titleId) {
+  stopHeroPreview();
   const data = await API.title(titleId, state.profile.profile_id);
   const inList = data.in_list;
+  const next = data.up_next;  // series only: the episode Play starts
   const card = $("#detail-card");
   card.innerHTML = `
     <div class="detail-hero">
@@ -122,7 +194,7 @@ async function openDetail(titleId) {
       <div class="detail-hero-content">
         <h2>${titleArt(data)}</h2>
         <div class="detail-actions">
-          <button class="btn btn-play">▶ Play</button>
+          <button class="btn btn-play">▶ ${next ? `${next.resume ? "Resume" : "Play"} ${next.label}` : "Play"}</button>
           <button class="icon-btn js-list ${inList ? "active" : ""}" title="My List">${inList ? "✓" : "+"}</button>
           <button class="icon-btn js-up" title="I like this">👍</button>
           <button class="icon-btn js-love" title="Love this">❤</button>
@@ -154,14 +226,19 @@ async function openDetail(titleId) {
         <div><b>Country:</b> ${data.country}</div>
       </div>
     </div>
+    ${data.seasons ? `<div class="episodes" id="episodes"></div>` : ""}
     <div class="detail-section-title">More Like This</div>
     <div class="row-track" id="detail-mlt" style="padding-bottom:24px"></div>`;
 
+  if (data.seasons) renderEpisodes(data);
   const mlt = card.querySelector("#detail-mlt");
   data.more_like_this.forEach((it) => mlt.appendChild(card2(it)));
 
   card.querySelector(".detail-close").addEventListener("click", closeDetail);
-  card.querySelector(".btn-play").addEventListener("click", () => { closeDetail(); openPlayer(data); });
+  card.querySelector(".btn-play").addEventListener("click", () => {
+    closeDetail();
+    openPlayer(data, next ? next.episode_id : null);
+  });
   card.querySelector(".js-list").addEventListener("click", (e) => toggleList(data.title_id, e.currentTarget));
   card.querySelector(".js-up").addEventListener("click", () => rate(data.title_id, 4));
   card.querySelector(".js-love").addEventListener("click", () => rate(data.title_id, 5));
@@ -175,7 +252,50 @@ function card2(item) {  // card for in-modal rows
 }
 function closeDetail() { $("#detail-modal").classList.add("hidden"); }
 
-// the player (openPlayer, closePlayer, togglePause) lives in player.js
+// a series' episode list, one season at a time, opened on the season of the
+// episode that's up next
+function renderEpisodes(data) {
+  const box = $("#episodes");
+  let season = data.up_next ? data.up_next.season_number : data.seasons[0].season;
+  box.innerHTML = `
+    <div class="ep-head">
+      <h3>Episodes</h3>
+      ${data.seasons.length > 1
+        ? `<select class="ep-season">${data.seasons.map((s) => `<option value="${s.season}">Season ${s.season}</option>`).join("")}</select>`
+        : `<span class="ep-one">Season 1</span>`}
+    </div>
+    <div class="ep-list"></div>`;
+  const draw = () => {
+    const list = box.querySelector(".ep-list");
+    list.innerHTML = "";
+    for (const ep of data.seasons.find((s) => s.season === season).episodes) {
+      const current = data.up_next && data.up_next.episode_id === ep.episode_id;
+      const row = el(`
+        <div class="ep ${current ? "current" : ""}">
+          <div class="ep-num">${ep.episode_number}</div>
+          <div class="ep-thumb">
+            <img loading="lazy" src="${API.stillUrl(ep.episode_id)}" alt="">
+            <span class="ep-play">▶</span>
+            ${ep.progress != null ? `<div class="card-progress"><div class="card-progress-fill" style="width:${ep.progress}%"></div></div>` : ""}
+          </div>
+          <div class="ep-info">
+            <div class="ep-top"><span class="ep-title">${esc(ep.episode_title)}</span><span class="ep-len">${ep.runtime_minutes}m</span></div>
+            ${ep.synopsis ? `<p class="ep-syn">${esc(ep.synopsis)}</p>` : ""}
+          </div>
+        </div>`);
+      row.addEventListener("click", () => { closeDetail(); openPlayer(data, ep.episode_id); });
+      list.appendChild(row);
+    }
+  };
+  const picker = box.querySelector(".ep-season");
+  if (picker) {
+    picker.value = season;
+    picker.addEventListener("change", () => { season = Number(picker.value); draw(); });
+  }
+  draw();
+}
+
+// the player (openPlayer, closePlayer, ...) lives in player.js
 
 // my list + ratings
 async function toggleList(titleId, btn) {
@@ -360,9 +480,8 @@ function wireGlobalUI() {
   $("#assistant-btn").addEventListener("click", openAssistant);
   $("#assistant-close").addEventListener("click", closeAssistant);
   $("#assistant-form").addEventListener("submit", (e) => { e.preventDefault(); sendAssistant(); });
-  $("#player-close").addEventListener("click", closePlayer);
-  $("#player-playpause").addEventListener("click", togglePause);
   $("#detail-modal").addEventListener("click", (e) => { if (e.target.id === "detail-modal") closeDetail(); });
+  wirePlayer();
 
   document.querySelectorAll("[data-nav]").forEach((a) => a.addEventListener("click", () => {
     const v = a.dataset.nav;
@@ -375,8 +494,11 @@ function wireGlobalUI() {
 
   window.addEventListener("scroll", () => {
     $("#navbar").classList.toggle("solid", window.scrollY > 60);
+    if (window.scrollY > 300) stopHeroPreview();  // it's scrolled out of sight
   });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) stopHeroPreview(); });
   document.addEventListener("keydown", (e) => {
+    if (playerKeys(e)) return;
     if (e.key === "Escape") { closeDetail(); closePlayer(); closeAssistant(); }
   });
 }

@@ -9,6 +9,7 @@ from fastapi.responses import FileResponse, Response
 
 from backend.poster import poster_svg
 from data_engineering import tmdb
+from media import library
 
 # Downloaded art never changes under a given ?v= (the frontend adds the manifest's
 # timestamp), so it can be cached for a day. Generated SVGs get a short cache so
@@ -59,6 +60,16 @@ def image(rec: dict, kind: str, w: int, h: int):
     # banners get a plain background: the page draws the title over them
     svg = poster_svg(rec, w=w, h=h, labels=kind == "poster")
     return Response(content=svg, media_type="image/svg+xml", headers=SVG_CACHE)
+
+
+def still(rec: dict, ep: dict, w: int, h: int):
+    """An episode's thumbnail: its TMDB still, else a frame from the film the
+    episode plays (media.extras), else the show's banner."""
+    entry = _entry(rec) or {}
+    key = f"{ep['season_number']}x{ep['episode_number']}"
+    path = (_existing(entry.get("episodes", {}).get(key, {}).get("still"))
+            or library.still_for_episode(ep["title_id"], ep["episode_id"]))
+    return _file(path) if path else image(rec, "backdrop", w, h)
 
 
 def status(get_title) -> dict:

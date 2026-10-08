@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from paths import DB_PATH, FRONTEND_DIR, ROOT
-from backend import artwork, store, video
+from backend import artwork, episodes, store, video
 from streaming.topics import WATCH_EVENTS, RATINGS
 
 
@@ -59,7 +59,7 @@ def streaming():
         def on_watch(v):
             store.record_watch(v["profile_id"], v["title_id"],
                                v.get("watch_seconds", 0), v.get("completion", 0.0),
-                               v.get("device", "Web"))
+                               v.get("device", "Web"), v.get("episode_id"))
             s.add_interaction(v["profile_id"], v["title_id"],
                               completion=float(v.get("completion", 0.0)))
 
@@ -89,6 +89,7 @@ app = FastAPI(title="Netflix Clone API", version="1.0.0", lifespan=_lifespan)
 class WatchBody(BaseModel):
     profile_id: int
     title_id: int
+    episode_id: int | None = None  # required for a series, absent for a film
     watch_seconds: int = 0
     completion: float = 0.0
     device: str = "Web"
@@ -137,14 +138,12 @@ def get_home(profile_id: int = Query(...)):
     rows = s.home_rows(profile_id)
     top_extra = []
 
-    # Continue Watching: started-but-unfinished titles, with resume %
+    # Continue Watching: started-but-unfinished titles, with resume % (and the episode, for a series)
     cw_items = []
     for e in store.get_continue_watching(profile_id):
         rec = s.get_title(e["title_id"])
         if rec:
-            item = dict(rec)
-            item["progress"] = e["progress"]
-            cw_items.append(item)
+            cw_items.append({**rec, **e})
     if cw_items:
         top_extra.append({"title": "Continue Watching", "kind": "continue", "items": cw_items})
 
@@ -183,6 +182,12 @@ def get_title(title_id: int, profile_id: int = Query(None)):
     out["more_like_this"] = s.more_like_this(title_id, k=12)
     out["in_list"] = title_id in store.get_list(profile_id) if profile_id else False
     out["my_rating"] = _my_rating(profile_id, title_id) if profile_id else None
+    if rec["content_type"] == "series":
+        out["seasons"] = episodes.seasons(title_id, profile_id)
+        nxt = episodes.up_next(profile_id, title_id)
+        last = episodes.last_watched(profile_id, title_id) if profile_id else None
+        out["up_next"] = {**nxt, "label": episodes.label(nxt),
+                          "resume": bool(last and last["episode_id"] == nxt["episode_id"])}
     return out
 
 
@@ -234,9 +239,18 @@ def recommendations(profile_id: int = Query(...), k: int = 24):
 # writes: published to the event stream; the consumer sinks them to the warehouse
 @app.post("/api/watch")
 def watch(body: WatchBody):
+    # checked here, not in the consumer: a bad event would otherwise sit in the log
+    rec = _title_or_404(body.title_id)
+    if rec["content_type"] == "series":
+        ep = episodes.get(body.episode_id) if body.episode_id else None
+        if not ep or ep["title_id"] != body.title_id:
+            raise HTTPException(400, "A series needs the episode_id of one of its episodes")
+    elif body.episode_id is not None:
+        raise HTTPException(400, "A film has no episodes")
     producer, _ = streaming()
     ack = producer.send(WATCH_EVENTS, {
         "profile_id": body.profile_id, "title_id": body.title_id,
+        "episode_id": body.episode_id,
         "watch_seconds": body.watch_seconds, "completion": body.completion,
         "device": body.device}, key=body.profile_id)
     return {"ok": True, "streamed": True, **ack}
@@ -335,6 +349,14 @@ def backdrop(title_id: int, w: int = 1280, h: int = 720):
 @app.get("/api/logo/{title_id}")
 def logo(title_id: int):
     return artwork.image(_title_or_404(title_id), "logo", 0, 0)
+
+
+@app.get("/api/still/{episode_id}")
+def still(episode_id: int, w: int = 400, h: int = 225):
+    ep = episodes.get(episode_id)
+    if not ep:
+        raise HTTPException(404, "Episode not found")
+    return artwork.still(_title_or_404(ep["title_id"]), ep, w, h)
 
 
 @app.get("/api/artwork")

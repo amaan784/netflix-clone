@@ -1,8 +1,8 @@
 """
 Data-quality checks run after each load.
 
-Verifies foreign keys, measure ranges, null columns, and that fact tables
-contain data.
+Verifies foreign keys, measure ranges, null columns, that fact tables contain
+data, and that series, episodes and watch events fit together.
 """
 from __future__ import annotations
 
@@ -81,6 +81,41 @@ def run_all_checks(conn: sqlite3.Connection) -> dict:
             SELECT title, release_year, COUNT(*) c
             FROM dim_title GROUP BY title, release_year HAVING c > 1)""")
     check("no duplicate (title, year)", dupe_titles == 0, f"duplicates={dupe_titles}")
+
+    # episodes
+    no_eps = _scalar(conn, """
+        SELECT COUNT(*) FROM dim_title t
+        WHERE t.content_type = 'series'
+          AND NOT EXISTS (SELECT 1 FROM dim_episode e WHERE e.title_id = t.title_id)""")
+    check("every series has episodes", no_eps == 0, f"series_without_episodes={no_eps}")
+
+    movie_eps = _scalar(conn, """
+        SELECT COUNT(*) FROM dim_episode e JOIN dim_title t ON e.title_id = t.title_id
+        WHERE t.content_type = 'movie'""")
+    check("no episodes on movies", movie_eps == 0, f"violations={movie_eps}")
+
+    gaps = _scalar(conn, """
+        SELECT COUNT(*) FROM (
+            SELECT title_id, season_number FROM dim_episode
+            GROUP BY title_id, season_number
+            HAVING MIN(episode_number) != 1 OR MAX(episode_number) != COUNT(*))""")
+    check("episodes numbered 1..n in each season", gaps == 0, f"seasons_with_gaps={gaps}")
+
+    orphan_ep = _scalar(conn, """
+        SELECT COUNT(*) FROM fact_watch_event f
+        LEFT JOIN dim_episode e ON f.episode_id = e.episode_id
+        WHERE f.episode_id IS NOT NULL AND e.episode_id IS NULL""")
+    check("no orphan watch events -> dim_episode", orphan_ep == 0, f"orphans={orphan_ep}")
+
+    wrong_kind = _scalar(conn, """
+        SELECT COUNT(*) FROM fact_watch_event f JOIN dim_title t ON f.title_id = t.title_id
+        WHERE (t.content_type = 'series') != (f.episode_id IS NOT NULL)""")
+    check("episode set exactly on series events", wrong_kind == 0, f"violations={wrong_kind}")
+
+    wrong_title = _scalar(conn, """
+        SELECT COUNT(*) FROM fact_watch_event f JOIN dim_episode e ON f.episode_id = e.episode_id
+        WHERE e.title_id != f.title_id""")
+    check("an event's episode belongs to its title", wrong_title == 0, f"violations={wrong_title}")
 
     passed = sum(1 for c in checks if c["passed"])
     return {"checks": checks, "passed": passed, "total": len(checks),
