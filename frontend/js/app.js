@@ -416,6 +416,52 @@ async function loadAnalytics() {
   barChart("#chart-daily", d.daily_engagement.slice(-14).map(r => [r.cal_date.slice(5), r.active_profiles]));
 
   loadStreaming();
+  loadLakehouse();
+}
+
+// lakehouse: layer sizes from the last run, plus a few gold tables
+async function loadLakehouse(run = false) {
+  try {
+    renderLakehouse(run ? await API.post("/api/lakehouse/run", {}) : await API.get("/api/lakehouse"));
+  } catch (e) {
+    $("#lake-meta").textContent = "The lakehouse isn't available right now.";
+  }
+}
+
+function renderLakehouse(d) {
+  const r = d.last_run;
+  if (!r) {
+    $("#lake-meta").textContent = d.hint || "The first lakehouse run is still going; try Run pipeline in a moment.";
+    return;
+  }
+  $("#lake-layers").innerHTML = ["bronze", "silver", "gold"].map((layer) => {
+    const s = r.layers[layer];
+    return `<div class="kpi layer ${layer}"><div class="v">${s.rows.toLocaleString()}</div>
+      <div class="l">${layer} rows · ${s.files} files · ${(s.bytes / 1e6).toFixed(2)} MB</div></div>`;
+  }).join("");
+  const landed = Object.values(r.stream_records_landed || {}).reduce((a, b) => a + b, 0);
+  $("#lake-meta").textContent = `Last run ${r.ran_at.replace("T", " ")} took ${r.seconds}s: `
+    + `${landed} new event${landed === 1 ? "" : "s"} from the stream, ${r.quarantined} quarantined in total.`;
+  barChart("#lake-binge", d.binge_by_series.map((x) => [x.title, x.episodes_per_session]));
+  barChart("#lake-views", d.top_views.map((x) => [x.title, x.views]));
+  $("#lake-retention").innerHTML = retentionTable(d.cohort_retention);
+  $("#lake-quarantine").innerHTML = d.quarantine.length
+    ? d.quarantine.map((q) => `<div class="bar-row"><div class="bl wide">${esc(q.problem)} (${q.source.replace("_", " ")})</div>
+        <div class="bv">${q.n}</div></div>`).join("")
+    : `<div class="empty" style="padding:8px 0;font-size:14px">Nothing quarantined.</div>`;
+}
+
+function retentionTable(rows) {
+  const cohorts = [...new Set(rows.map((r) => r.cohort))];
+  const months = [...new Set(rows.map((r) => r.month_number))].sort((a, b) => a - b);
+  const cell = (c, m) => {
+    const r = rows.find((x) => x.cohort === c && x.month_number === m);
+    return r ? `<td style="background:rgba(229,9,20,${(r.retention * 0.8).toFixed(2)})">${Math.round(r.retention * 100)}%</td>` : "<td></td>";
+  };
+  return `<table class="retention">
+    <tr><th>First watched</th>${months.map((m) => `<th>+${m} mo</th>`).join("")}</tr>
+    ${cohorts.map((c) => `<tr><th>${c}</th>${months.map((m) => cell(c, m)).join("")}</tr>`).join("")}
+  </table>`;
 }
 
 async function loadStreaming() {
@@ -482,6 +528,14 @@ function wireGlobalUI() {
   $("#assistant-form").addEventListener("submit", (e) => { e.preventDefault(); sendAssistant(); });
   $("#detail-modal").addEventListener("click", (e) => { if (e.target.id === "detail-modal") closeDetail(); });
   wirePlayer();
+  $("#lake-run").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Running...";
+    await loadLakehouse(true);
+    btn.disabled = false;
+    btn.textContent = "Run pipeline";
+  });
 
   document.querySelectorAll("[data-nav]").forEach((a) => a.addEventListener("click", () => {
     const v = a.dataset.nav;

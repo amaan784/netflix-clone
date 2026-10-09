@@ -123,44 +123,49 @@ class StreamProcessor:
 
 
 def _demo():
+    import json
     import random
-    from streaming.backends import LogStreamBackend
+    import tempfile
+    from streaming.broker import LogBroker
+    from streaming.consumer import Consumer
+    from streaming.producer import Producer
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s | %(message)s")
-    backend = LogStreamBackend()
-    producer = backend.producer
-    consumer = backend.make_consumer(SINK_GROUP, [WATCH_EVENTS, RATINGS])
+    # a throwaway broker: the demo's made-up events never reach the app's own log
+    with tempfile.TemporaryDirectory(prefix="netclone-stream-demo-") as tmp:
+        broker = LogBroker(tmp)
+        producer = Producer(broker)
+        consumer = Consumer(broker, SINK_GROUP, [WATCH_EVENTS, RATINGS])
 
-    seen_watch, seen_rating = [], []
-    proc = StreamProcessor(consumer, backend.stats,
-                           on_watch=lambda v: seen_watch.append(v),
-                           on_rating=lambda v: seen_rating.append(v))
+        seen_watch, seen_rating = [], []
+        proc = StreamProcessor(consumer, broker.stats,
+                               on_watch=lambda v: seen_watch.append(v),
+                               on_rating=lambda v: seen_rating.append(v))
 
-    rng = random.Random(7)
-    print("Producing 40 sample events...")
-    for _ in range(40):
-        pid = rng.randint(1, 50)
-        tid = rng.randint(1, 60)
-        if rng.random() < 0.7:
-            ack = producer.send(WATCH_EVENTS,
-                                {"profile_id": pid, "title_id": tid,
-                                 "watch_seconds": rng.randint(60, 3600),
-                                 "completion": round(rng.random(), 2)},
-                                key=pid)
-        else:
-            ack = producer.send(RATINGS,
-                                {"profile_id": pid, "title_id": tid,
-                                 "rating": rng.randint(1, 5)}, key=pid)
-        print(f"  -> {ack['topic']:13} partition={ack['partition']} offset={ack['offset']}")
+        rng = random.Random(7)
+        print("Producing 40 sample events...")
+        for _ in range(40):
+            pid = rng.randint(1, 50)
+            tid = rng.randint(1, 60)
+            if rng.random() < 0.7:
+                ack = producer.send(WATCH_EVENTS,
+                                    {"profile_id": pid, "title_id": tid,
+                                     "watch_seconds": rng.randint(60, 3600),
+                                     "completion": round(rng.random(), 2)},
+                                    key=pid)
+            else:
+                ack = producer.send(RATINGS,
+                                    {"profile_id": pid, "title_id": tid,
+                                     "rating": rng.randint(1, 5)}, key=pid)
+            print(f"  -> {ack['topic']:13} partition={ack['partition']} offset={ack['offset']}")
 
-    print("\nConsuming...")
-    n = proc.process_batch()
-    print(f"  processed {n} records (watch={len(seen_watch)}, rating={len(seen_rating)})")
+        print("\nConsuming...")
+        n = proc.process_batch()
+        print(f"  processed {n} records (watch={len(seen_watch)}, rating={len(seen_rating)})")
 
-    print("\nLive trending (title_id, score):", proc.trending.top(5))
-    print("\nStats:")
-    import json
-    print(json.dumps(proc.stats(), indent=2))
+        print("\nLive trending (title_id, score):", proc.trending.top(5))
+        print("\nStats:")
+        print(json.dumps(proc.stats(), indent=2))
 
 
 if __name__ == "__main__":

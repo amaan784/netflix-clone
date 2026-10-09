@@ -4,7 +4,9 @@ Run:  python -m backend.main      (or)      python run.py
 """
 from __future__ import annotations
 
+import logging
 import sqlite3
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Query
@@ -16,6 +18,8 @@ from paths import DB_PATH, FRONTEND_DIR, ROOT
 from backend import artwork, episodes, store, video
 from streaming.topics import WATCH_EVENTS, RATINGS
 
+
+logger = logging.getLogger("app")
 
 # lazily-initialised singletons
 _svc = None
@@ -73,10 +77,35 @@ def streaming():
     return _producer, _processor
 
 
+_lake_consumer = None
+
+
+def lakehouse_run() -> dict:
+    """Run the lakehouse (bronze -> silver -> gold). Its consumer group reads the
+    same topics as the warehouse sink, at its own pace."""
+    global _lake_consumer
+    from lakehouse import build
+    from streaming.topics import LAKE_GROUP
+    streaming()
+    if _lake_consumer is None:
+        _lake_consumer = _backend.make_consumer(LAKE_GROUP, [WATCH_EVENTS, RATINGS])
+    return build.run(_lake_consumer, log=lambda msg: logger.info(msg.strip()))
+
+
+def _lakehouse_in_background():
+    try:
+        lakehouse_run()
+    except ImportError:
+        logger.warning("lakehouse skipped: duckdb isn't installed (pip install duckdb)")
+    except Exception:
+        logger.exception("lakehouse run failed")
+
+
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
     svc()        # warm the models so the first request is fast
     streaming()  # start the event-streaming consumer
+    threading.Thread(target=_lakehouse_in_background, name="lakehouse", daemon=True).start()
     yield
     if _processor is not None:
         _processor.stop()
@@ -304,6 +333,26 @@ def streaming_trending(k: int = 10):
     s = svc()
     _, proc = streaming()
     return {"items": s.hydrate(proc.trending.top(k))}
+
+
+# lakehouse (DuckDB over Parquet)
+@app.get("/api/lakehouse")
+def lakehouse_dashboard():
+    try:
+        from lakehouse import build
+    except ImportError:
+        return {"last_run": None, "hint": "Install DuckDB to build the lakehouse: pip install duckdb"}
+    return build.dashboard()
+
+
+@app.post("/api/lakehouse/run")
+def lakehouse_run_now():
+    try:
+        summary = lakehouse_run()
+    except ImportError:
+        raise HTTPException(503, "Install DuckDB to build the lakehouse: pip install duckdb")
+    from lakehouse import build
+    return {**build.dashboard(), "last_run": summary}
 
 
 # offline recommender evaluation

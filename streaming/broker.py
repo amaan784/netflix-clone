@@ -96,7 +96,21 @@ class LogBroker:
                 self._offsets = {}
 
     def _save_offsets(self):
-        self._offsets_path.write_text(json.dumps(self._offsets, indent=2), encoding="utf-8")
+        # Another process (python -m lakehouse.build) may commit to this file too.
+        # Offsets only ever move forward, so merge and keep the furthest of each.
+        merged = {}
+        if self._offsets_path.exists():
+            try:
+                merged = json.loads(self._offsets_path.read_text(encoding="utf-8"))
+            except (json.JSONDecodeError, OSError):
+                merged = {}
+        for group, topics in self._offsets.items():
+            for topic, parts in topics.items():
+                saved = merged.setdefault(group, {}).setdefault(topic, {})
+                for p, offset in parts.items():
+                    saved[p] = max(saved.get(p, 0), offset)
+        self._offsets = merged
+        self._offsets_path.write_text(json.dumps(merged, indent=2), encoding="utf-8")
 
     def stats(self) -> dict:
         with self._lock:

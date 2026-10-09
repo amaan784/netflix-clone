@@ -11,6 +11,9 @@ pandas==2.*
 numpy>=1.26,<3
 scikit-learn==1.*
 
+# Lakehouse: Parquet files queried with DuckDB
+duckdb==1.*
+
 # Streaming (only needed for the real-Kafka backend; the offline log broker
 # uses the standard library). Set KAFKA_BOOTSTRAP to enable it.
 kafka-python-ng==2.2.*

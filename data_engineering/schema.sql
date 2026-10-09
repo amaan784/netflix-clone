@@ -89,7 +89,8 @@ CREATE TABLE IF NOT EXISTS fact_watch_event (
     completion    REAL    NOT NULL,        -- fraction 0..1 of the movie or episode watched
     completed     INTEGER NOT NULL,        -- 1 if completion >= 0.9
     device        TEXT,                    -- TV | Mobile | Web | Tablet
-    event_ts      TEXT NOT NULL
+    event_ts      TEXT NOT NULL,
+    origin        TEXT NOT NULL DEFAULT 'generated'  -- 'generated' history, or 'app' (live, via the stream)
 );
 
 CREATE TABLE IF NOT EXISTS fact_rating (
@@ -98,7 +99,8 @@ CREATE TABLE IF NOT EXISTS fact_rating (
     title_id   INTEGER NOT NULL REFERENCES dim_title(title_id),
     date_id    INTEGER NOT NULL REFERENCES dim_date(date_id),
     rating     INTEGER NOT NULL CHECK (rating BETWEEN 1 AND 5),
-    rated_ts   TEXT NOT NULL
+    rated_ts   TEXT NOT NULL,
+    origin     TEXT NOT NULL DEFAULT 'generated'
 );
 
 -- Operational table used by the application (user's saved list).

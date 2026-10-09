@@ -49,6 +49,7 @@ Other commands:
 python run.py --rebuild   # force-rebuild the warehouse, then serve
 python run.py --etl       # run the ETL pipeline only (no web server)
 python -m data_engineering.pipeline   # same ETL, standalone
+python -m lakehouse.build             # run the lakehouse (bronze -> silver -> gold)
 ```
 
 Everything runs on localhost.
@@ -78,6 +79,24 @@ movie/series split.
 
 The app writes live user actions (`backend/store.py`) back into the same
 warehouse, so a pipeline refresh or model retrain picks up real usage.
+
+## Lakehouse (`lakehouse/`)
+
+Beside the SQLite warehouse sits a lakehouse: Parquet files in three layers,
+built and queried with DuckDB.
+
+| Layer | What's in it |
+|-------|--------------|
+| Bronze | Raw events as they arrived. The warehouse's generated history is copied once (and again only if it changes); live events come straight off the event stream through the lake's own consumer group (`lake-sink`), kept raw (JSON payload plus topic, partition and offset), one batch file per run, partitioned by ingest date. |
+| Silver | Bronze parsed, history and stream unioned, duplicates dropped (a re-delivered batch lands twice in bronze but once here), and every row checked against the dimensions. Rows that fail go to a quarantine table with the reason (for example `series event without an episode`). Good rows get the dimension columns joined on; watch events are partitioned by month. |
+| Gold | Business tables built with SQL: daily engagement, title performance (views in film-sized units), weekly genre share, binge sessions (sessionised with window functions: a new session after a 30-minute gap), episodes per session by series, retention by first-watch month, and device mix. |
+
+The app runs the lakehouse on startup and from the Analytics page ("Run
+pipeline"); `python -m lakehouse.build` runs it from the command line. The
+Analytics page shows each layer's rows, files and size, the most-binged series,
+the most-viewed titles, a retention heatmap and the quarantine. Because bronze
+keeps every streamed event, the lake still has live activity after the
+warehouse has been rebuilt.
 
 ## AI / ML (`ai/`)
 
@@ -161,7 +180,8 @@ Topics: `watch-events` (3 partitions), `ratings` (2 partitions). The Analytics
 page shows topic/partition message counts, consumer lag, throughput, and live
 trending. `GET /api/streaming/stats` and `/api/streaming/trending` expose this.
 
-Run the streaming layer on its own (produces sample events and consumes them):
+Run the streaming layer on its own (produces sample events into a throwaway
+broker and consumes them):
 
 ```powershell
 python -m streaming.pipeline

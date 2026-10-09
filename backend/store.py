@@ -35,8 +35,8 @@ def record_watch(profile_id: int, title_id: int, watch_seconds: int,
         date_id = _ensure_date(conn, ts)
         cur = conn.execute(
             """INSERT INTO fact_watch_event (profile_id,title_id,episode_id,date_id,
-               watch_seconds,completion,completed,device,event_ts)
-               VALUES (?,?,?,?,?,?,?,?,?)""",
+               watch_seconds,completion,completed,device,event_ts,origin)
+               VALUES (?,?,?,?,?,?,?,?,?,'app')""",
             (profile_id, title_id, episode_id, date_id, int(watch_seconds), completion,
              1 if completion >= 0.9 else 0, device, ts))
         conn.commit()
@@ -55,8 +55,8 @@ def record_rating(profile_id: int, title_id: int, rating: int) -> dict:
         conn.execute("DELETE FROM fact_rating WHERE profile_id=? AND title_id=?",
                      (profile_id, title_id))
         cur = conn.execute(
-            """INSERT INTO fact_rating (profile_id,title_id,date_id,rating,rated_ts)
-               VALUES (?,?,?,?,?)""", (profile_id, title_id, date_id, rating, ts))
+            """INSERT INTO fact_rating (profile_id,title_id,date_id,rating,rated_ts,origin)
+               VALUES (?,?,?,?,?,'app')""", (profile_id, title_id, date_id, rating, ts))
         conn.commit()
         return {"rating_id": cur.lastrowid, "rating": rating}
     finally:

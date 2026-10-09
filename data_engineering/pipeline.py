@@ -19,7 +19,7 @@ from data_engineering import data_quality, tmdb
 
 # Stored in the database (PRAGMA user_version). Bump it whenever schema.sql
 # changes, and existing warehouses get rebuilt on the next start.
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 # log to console and file
 logger = logging.getLogger("etl")

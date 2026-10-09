@@ -117,6 +117,12 @@ def run_all_checks(conn: sqlite3.Connection) -> dict:
         WHERE e.title_id != f.title_id""")
     check("an event's episode belongs to its title", wrong_title == 0, f"violations={wrong_title}")
 
+    # lineage: every fact row says where it came from
+    bad_origin = _scalar(conn, """
+        SELECT (SELECT COUNT(*) FROM fact_watch_event WHERE origin NOT IN ('generated', 'app'))
+             + (SELECT COUNT(*) FROM fact_rating WHERE origin NOT IN ('generated', 'app'))""")
+    check("fact origin is 'generated' or 'app'", bad_origin == 0, f"violations={bad_origin}")
+
     passed = sum(1 for c in checks if c["passed"])
     return {"checks": checks, "passed": passed, "total": len(checks),
             "all_passed": passed == len(checks)}

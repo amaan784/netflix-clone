@@ -10,3 +10,4 @@ TOPICS = {
 }
 
 SINK_GROUP = "warehouse-sink"
+LAKE_GROUP = "lake-sink"  # the lakehouse reads the same topics at its own pace

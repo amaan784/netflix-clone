@@ -81,6 +81,20 @@
         <div class="chart-card"><h3>Topics &amp; Partitions (messages)</h3><div id="stream-topics"></div></div>
         <div class="chart-card"><h3>Trending Now (live from stream)</h3><div id="stream-trending"></div></div>
       </div>
+
+      <h2 class="view-title">Lakehouse (DuckDB + Parquet)</h2>
+      <p class="view-sub">Raw events land in bronze, get cleaned and checked into silver, and are summarised in gold: Parquet files queried with DuckDB. Live events come straight off the event stream through the lake's own consumer group.</p>
+      <div class="lake-head">
+        <div id="lake-layers" class="lake-layers"></div>
+        <button id="lake-run" class="btn lake-run">Run pipeline</button>
+      </div>
+      <p id="lake-meta" class="view-sub lake-meta"></p>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Most-Binged Series (episodes per session)</h3><div id="lake-binge"></div></div>
+        <div class="chart-card"><h3>Most Viewed (views = watch time in film-sized units)</h3><div id="lake-views"></div></div>
+        <div class="chart-card"><h3>Retention by First-Watch Month</h3><div id="lake-retention"></div></div>
+        <div class="chart-card"><h3>Quarantined Records</h3><div id="lake-quarantine"></div></div>
+      </div>
     </main>
 
     <footer class="footer">
