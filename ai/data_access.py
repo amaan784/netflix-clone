@@ -24,7 +24,7 @@ def load_frames() -> dict:
             FROM bridge_title_genre b JOIN dim_genre g ON b.genre_id = g.genre_id
         """, conn)
         events = pd.read_sql_query("""
-            SELECT profile_id, title_id, episode_id, watch_seconds, completion, completed
+            SELECT profile_id, title_id, episode_id, watch_seconds, completion, completed, event_ts
             FROM fact_watch_event
         """, conn)
         ratings = pd.read_sql_query(
@@ -94,6 +94,50 @@ def build_interactions(events: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFr
                       on=["profile_id", "title_id"], how="outer").fillna(0.0)
     merged["affinity"] = (merged["watch_signal"] + 0.6 * merged["rating_signal"]).clip(lower=0.0)
     return merged
+
+
+def holdout_split(events, ratings, strategy="last_n", max_holdout=5, holdout_frac=0.2,
+                  min_train_items=3, seed=42):
+    """Hold out each profile's latest (or random) positives as the answers to
+    predict. Returns the events and ratings with those (profile, title) pairs
+    removed, so nothing about the answers leaks into training, plus the held-out
+    titles and the remaining liked titles per profile."""
+    inter = build_interactions(events, ratings)
+    pos = inter[inter["affinity"] > 0][["profile_id", "title_id"]].copy()
+    recency = events.groupby(["profile_id", "title_id"])["event_ts"].max() \
+        .reset_index(name="ts")
+    pos = pos.merge(recency, on=["profile_id", "title_id"], how="left")
+    pos["ts"] = pos["ts"].fillna("1970-01-01")
+
+    held, train_liked = {}, {}
+    for pid, grp in pos.groupby("profile_id"):
+        tids = grp["title_id"].tolist()
+        n_pos = len(tids)
+        n_hold = max(1, min(max_holdout, int(round(n_pos * holdout_frac))))
+        if n_pos - n_hold < min_train_items:
+            n_hold = n_pos - min_train_items
+        if n_hold < 1:
+            # too few positives to hold any out: keep all as train context, don't test
+            train_liked[pid] = set(tids)
+            continue
+        if strategy == "last_n":
+            ordered = grp.sort_values("ts")["title_id"].tolist()
+            hold = set(ordered[-n_hold:])
+        else:
+            rng = np.random.default_rng(seed + int(pid))
+            arr = np.array(tids)
+            rng.shuffle(arr)
+            hold = set(arr[:n_hold].tolist())
+        held[pid] = hold
+        train_liked[pid] = set(t for t in tids if t not in hold)
+
+    held_pairs = {(pid, t) for pid, hs in held.items() for t in hs}
+
+    def keep_train(df):
+        flags = [(p, t) not in held_pairs for p, t in zip(df["profile_id"], df["title_id"])]
+        return df[pd.Series(flags, index=df.index)]
+
+    return keep_train(events), keep_train(ratings), held, train_liked
 
 
 def _loads(v):

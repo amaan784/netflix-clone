@@ -17,9 +17,10 @@ from paths import DB_PATH
 from ai import data_access
 from ai.content_based import ContentBasedModel
 from ai.collaborative import CollaborativeModel, ALSModel
+from ai.ranker import Ranker, Signals
 
 DEFAULT_KS = (5, 10, 20)
-DEFAULT_MODELS = ("popularity", "content", "itemcf", "svd", "als", "hybrid")
+DEFAULT_MODELS = ("popularity", "content", "itemcf", "svd", "als", "hybrid", "ranker")
 DEFAULT_WEIGHTS = {"content": 0.40, "coview": 0.30, "svd": 0.20, "pop": 0.10}
 
 
@@ -83,48 +84,9 @@ def _ap(ranked, relevant, k):
     return score / denom if denom > 0 else 0.0
 
 
-# split (leakage-free, at the raw-row level)
-def _split(events, ratings, strategy, max_holdout, holdout_frac, min_train_items, seed):
-    inter = data_access.build_interactions(events, ratings)
-    pos = inter[inter["affinity"] > 0][["profile_id", "title_id"]].copy()
-    recency = events.groupby(["profile_id", "title_id"])["event_ts"].max() \
-        .reset_index(name="ts")
-    pos = pos.merge(recency, on=["profile_id", "title_id"], how="left")
-    pos["ts"] = pos["ts"].fillna("1970-01-01")
-
-    held, train_liked = {}, {}
-    for pid, grp in pos.groupby("profile_id"):
-        tids = grp["title_id"].tolist()
-        n_pos = len(tids)
-        n_hold = max(1, min(max_holdout, int(round(n_pos * holdout_frac))))
-        if n_pos - n_hold < min_train_items:
-            n_hold = n_pos - min_train_items
-        if n_hold < 1:
-            # too few positives to hold any out: keep all as train context, don't test
-            train_liked[pid] = set(tids)
-            continue
-        if strategy == "last_n":
-            ordered = grp.sort_values("ts")["title_id"].tolist()
-            hold = set(ordered[-n_hold:])
-        else:
-            rng = np.random.default_rng(seed + int(pid))
-            arr = np.array(tids)
-            rng.shuffle(arr)
-            hold = set(arr[:n_hold].tolist())
-        held[pid] = hold
-        train_liked[pid] = set(t for t in tids if t not in hold)
-
-    held_pairs = {(pid, t) for pid, hs in held.items() for t in hs}
-
-    def keep_train(df):
-        flags = [(p, t) not in held_pairs for p, t in zip(df["profile_id"], df["title_id"])]
-        return df[pd.Series(flags, index=df.index)]
-
-    return keep_train(events), keep_train(ratings), held, train_liked
-
-
 # fit train models -> per-profile score functions
-def _build_scorers(train_events, train_ratings, titles, title_ids, train_liked, models, seed):
+def _build_scorers(train_events, train_ratings, titles, title_ids, train_liked, models, seed,
+                   kids=frozenset()):
     train_inter = data_access.build_interactions(train_events, train_ratings)
     aff = {}
     for r in train_inter[train_inter["affinity"] > 0].itertuples():
@@ -132,7 +94,7 @@ def _build_scorers(train_events, train_ratings, titles, title_ids, train_liked, 
 
     scorers = {}
     pop = _train_popularity(train_events)
-    if "popularity" in models:
+    if "popularity" in models or "hybrid" in models:  # the hybrid blends it in
         scorers["popularity"] = lambda pid: dict(pop)
     if "content" in models or "hybrid" in models:
         cb = ContentBasedModel().fit(titles)
@@ -145,6 +107,19 @@ def _build_scorers(train_events, train_ratings, titles, title_ids, train_liked, 
     if "als" in models:
         als = ALSModel().fit(train_inter, title_ids)
         scorers["als"] = lambda pid: als.predict_scores(pid)
+    if "ranker" in models:
+        # trained on the train split only (it holds out its own answers inside it)
+        ranker = Ranker(seed).fit(titles, train_events, train_ratings, kids)
+        signals = Signals.fit(titles, train_events, train_ratings, kids)
+
+        def ranker_scores(pid):
+            # two-stage: the ranked candidates first, everything else in hybrid order behind them
+            scores, _ = signals.hybrid(pid)
+            if ranker.ready:
+                scores.update({t: 1.0 + p for t, p in ranker.rank(signals, pid)})
+            return scores
+        ranker_scores.model = ranker  # so the report can show what it learned
+        scorers["ranker"] = ranker_scores
     return scorers, pop
 
 
@@ -176,15 +151,15 @@ def run_evaluation(*, ks=DEFAULT_KS, strategy="last_n", max_holdout=5, holdout_f
     weights = hybrid_weights or DEFAULT_WEIGHTS
 
     events, ratings = _load_events_ratings()
-    train_events, train_ratings, held, train_liked = _split(
+    train_events, train_ratings, held, train_liked = data_access.holdout_split(
         events, ratings, strategy, max_holdout, holdout_frac, min_train_items, seed)
 
+    kids = set(frames["profiles"].loc[frames["profiles"]["is_kids"] == 1, "profile_id"])
     if not include_kids:
-        kids = set(frames["profiles"].loc[frames["profiles"]["is_kids"] == 1, "profile_id"])
         held = {p: h for p, h in held.items() if p not in kids}
 
     scorers, _ = _build_scorers(train_events, train_ratings, titles, title_ids,
-                                train_liked, models, seed)
+                                train_liked, models, seed, kids)
 
     results = {m: {f"{name}@{k}": [] for k in ks
                    for name in ("precision", "recall", "ndcg", "map", "hit_rate")}
@@ -217,13 +192,16 @@ def run_evaluation(*, ks=DEFAULT_KS, strategy="last_n", max_holdout=5, holdout_f
 
     primary = ks[1] if len(ks) > 1 else ks[0]
     best = max(models_out, key=lambda m: models_out[m].get(f"ndcg@{primary}", 0))
-    return {
+    out = {
         "config": {"strategy": strategy, "ks": list(ks), "n_profiles_evaluated": n_eval,
                    "n_titles": len(title_ids), "include_kids": include_kids,
                    "hybrid_weights": weights},
         "models": models_out,
         "best_by_ndcg": {"k": primary, "model": best},
     }
+    if "ranker" in scorers:
+        out["ranker_features"] = scorers["ranker"].model.importance
+    return out
 
 
 def grid_search_hybrid(*, metric="ndcg@10", step=0.1, strategy="last_n",
@@ -235,13 +213,13 @@ def grid_search_hybrid(*, metric="ndcg@10", step=0.1, strategy="last_n",
     k = int(metric.split("@")[1])
 
     events, ratings = _load_events_ratings()
-    train_events, train_ratings, held, train_liked = _split(
+    train_events, train_ratings, held, train_liked = data_access.holdout_split(
         events, ratings, strategy, 5, 0.2, 3, seed)
     if not include_kids:
         kids = set(frames["profiles"].loc[frames["profiles"]["is_kids"] == 1, "profile_id"])
         held = {p: h for p, h in held.items() if p not in kids}
     scorers, _ = _build_scorers(train_events, train_ratings, titles, title_ids,
-                                train_liked, DEFAULT_MODELS, seed)
+                                train_liked, ("popularity", "content", "itemcf", "svd"), seed)
 
     # precompute normalized component scores once per profile
     comp = {}

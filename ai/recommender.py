@@ -1,22 +1,26 @@
 """
 Recommendation service used by the backend.
 
-Owns the trained models (content-based, collaborative, semantic search),
-popularity stats, and per-profile interaction state. recommend_for_profile is a
-hybrid ranker blending content (0.40), co-viewed (0.30), SVD (0.20) and
-popularity (0.10), with cold-start fallback to trending and kids/maturity filtering.
+Owns the trained models (content-based, collaborative, ALS, semantic search,
+the learned ranker), popularity stats, and per-profile interaction state.
+recommend_for_profile is two-stage: a hybrid blending content (0.40),
+co-viewed (0.30), SVD (0.20) and popularity (0.10) shortlists candidates, and
+the trained ranker (ai/ranker.py) puts them in order. Cold-start profiles get
+trending titles, and kids profiles never see mature ones.
 """
 from __future__ import annotations
 
 import numpy as np
-import pandas as pd
 
 from ai import data_access
 from ai.content_based import ContentBasedModel
-from ai.collaborative import CollaborativeModel
+from ai.collaborative import ALSModel, CollaborativeModel
+from ai.ranker import Ranker, Signals
 from ai.semantic_search import SemanticSearch
 
 MATURE_RATINGS = {"TV-MA", "R", "NC-17"}
+# Top Picks are ordered by the trained ranker; False goes back to the hybrid blend alone
+USE_RANKER = True
 
 
 def _minmax(d: dict) -> dict:
@@ -37,6 +41,9 @@ class RecommenderService:
         self.interactions = None
         self.content = ContentBasedModel()
         self.collab = CollaborativeModel()
+        self.als = ALSModel()
+        self.ranker = Ranker()
+        self.signals: Signals | None = None
         self.search_engine = SemanticSearch()
         self.popularity: dict[int, float] = {}
         self.watched: dict[int, dict[int, float]] = {}
@@ -55,10 +62,20 @@ class RecommenderService:
         title_ids = self.titles["title_id"].tolist()
         self.content.fit(self.titles)
         self.collab.fit(self.interactions, title_ids)
+        self.als.fit(self.interactions, title_ids)
         self.search_engine.fit(self.titles)
 
         self._compute_popularity()
         self._build_watched_state()
+        profiles = self.frames["profiles"]
+        kids = set(profiles.loc[profiles["is_kids"] == 1, "profile_id"])
+        # the ranker reads profiles' liked titles from self.watched, so live
+        # watches and ratings count straight away
+        self.signals = Signals(self.titles, self.content, self.collab, self.als, self.popularity,
+                               self.watched, kids)
+        self.ranker = Ranker()
+        if USE_RANKER:
+            self.ranker.fit(self.titles, self.frames["events"], self.frames["ratings"], kids)
         self.ready = True
         return self
 
@@ -198,6 +215,11 @@ class RecommenderService:
         # Cold start: no history -> trending.
         if not liked:
             return self.trending(k=k, allow=allow)
+
+        if self.ranker.ready:
+            scored = self.ranker.rank(self.signals, profile_id,
+                                      allow=lambda t: allow(self.title_lookup[t]))
+            return self.hydrate(self._mmr_rerank(scored, k), reason="Top pick for you")
 
         liked_ids = list(liked.keys())
         content_scores = self.content.profile_scores(liked_ids, weights=liked)
