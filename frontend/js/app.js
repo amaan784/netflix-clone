@@ -417,6 +417,37 @@ async function loadAnalytics() {
 
   loadStreaming();
   loadLakehouse();
+  API.get("/api/eval?cached=true").then((r) => { if (r.models) renderEval(r); }).catch(() => {});
+}
+
+// offline evaluation: the model comparison and the ranker's learned weights
+const FEATURE_NAMES = {
+  content: "Content similarity", coview: "Watched together", svd: "Matrix factorisation (SVD)",
+  als: "Matrix factorisation (ALS)", popularity: "Popularity", genre_match: "Genre share",
+  genre_lift: "Genre vs other viewers", taste_fit: "Genre vs the catalog", type_match: "Films vs series habit",
+  imdb: "IMDb score", age: "Title age", is_series: "Is a series", history: "History size",
+  kids_profile: "Kids profile",
+};
+function renderEval(r) {
+  const rows = Object.entries(r.models).sort((a, b) => b[1]["ndcg@10"] - a[1]["ndcg@10"]);
+  const cols = [["ndcg@10", "NDCG"], ["precision@10", "Precision"], ["recall@10", "Recall"],
+                ["hit_rate@10", "Hit rate"], ["coverage@10", "Coverage"]];
+  $("#eval-table").innerHTML = `<table class="eval-table">
+    <tr><th>Model</th>${cols.map(([, label]) => `<th>${label}</th>`).join("")}</tr>
+    ${rows.map(([name, m]) => `<tr class="${name === "ranker" ? "ranker" : ""}"><th>${name}</th>
+      ${cols.map(([key]) => `<td>${m[key].toFixed(3)}</td>`).join("")}</tr>`).join("")}
+  </table>`;
+  const weights = r.ranker_features || [];
+  const max = Math.max(...weights.map((w) => Math.abs(w.weight)), 0.01);
+  $("#eval-weights").innerHTML = weights.map((w) => `
+    <div class="bar-row">
+      <div class="bl wide">${FEATURE_NAMES[w.feature] || w.feature}</div>
+      <div class="bt"><div class="bf ${w.weight < 0 ? "neg" : ""}" style="width:${(Math.abs(w.weight) / max) * 100}%"></div></div>
+      <div class="bv">${w.weight > 0 ? "+" : ""}${w.weight.toFixed(2)}</div>
+    </div>`).join("");
+  const ranker = r.models.ranker, hybrid = r.models.hybrid;
+  $("#eval-meta").textContent = `Last run ${String(r.ran_at || "").replace("T", " ")} on ${r.config.n_profiles_evaluated} profiles. `
+    + (ranker && hybrid ? `Ranker NDCG@10 ${ranker["ndcg@10"].toFixed(3)} vs hybrid ${hybrid["ndcg@10"].toFixed(3)}.` : "");
 }
 
 // lakehouse: layer sizes from the last run, plus a few gold tables
@@ -535,6 +566,15 @@ function wireGlobalUI() {
     await loadLakehouse(true);
     btn.disabled = false;
     btn.textContent = "Run pipeline";
+  });
+  $("#eval-run").addEventListener("click", async (e) => {
+    const btn = e.currentTarget;
+    btn.disabled = true;
+    btn.textContent = "Evaluating...";
+    try { renderEval(await API.get("/api/eval?k=10")); }
+    catch (err) { $("#eval-meta").textContent = "The evaluation failed; see the server log."; }
+    btn.disabled = false;
+    btn.textContent = "Run evaluation";
   });
 
   document.querySelectorAll("[data-nav]").forEach((a) => a.addEventListener("click", () => {

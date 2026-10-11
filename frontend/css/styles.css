@@ -375,6 +375,13 @@ a { cursor: pointer; }
 .lake-run:disabled { opacity: .6; cursor: wait; }
 .lake-meta { padding-top: 12px; }
 .bar-row .bl.wide { width: auto; flex: 1; white-space: normal; }
+.eval-meta { flex: 1; align-self: center; padding: 0; }
+.eval-table { border-collapse: collapse; width: 100%; font-size: 13px; }
+.eval-table th, .eval-table td { padding: 6px 8px; text-align: right; border-bottom: 1px solid #1f1f27; }
+.eval-table th:first-child { text-align: left; }
+.eval-table tr:first-child th { color: var(--muted); font-weight: 600; }
+.eval-table tr.ranker { background: rgba(229,9,20,.12); }
+.bar-row .bf.neg { background: linear-gradient(90deg, #4a6fa5, #7fa6e0); }
 .retention { border-collapse: collapse; width: 100%; font-size: 12px; }
 .retention th { color: var(--muted); font-weight: 600; padding: 5px 6px; text-align: left; }
 .retention td { padding: 5px 6px; text-align: center; color: #fff; border: 1px solid #121218; }

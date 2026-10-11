@@ -8,6 +8,7 @@ import logging
 import sqlite3
 import threading
 from contextlib import asynccontextmanager
+from datetime import datetime
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import FileResponse
@@ -78,6 +79,7 @@ def streaming():
 
 
 _lake_consumer = None
+_last_eval = None
 
 
 def lakehouse_run() -> dict:
@@ -358,7 +360,12 @@ def lakehouse_run_now():
 # offline recommender evaluation
 @app.get("/api/eval")
 def eval_models(k: int = 10, strategy: str = "last_n", include_kids: bool = True,
-                grid: bool = False):
+                grid: bool = False, cached: bool = False):
+    """Offline metrics for every model. A run takes ~10 s; cached=true returns the
+    last run's result instead (or {"models": null} if there hasn't been one)."""
+    global _last_eval
+    if cached:
+        return _last_eval or {"models": None}
     from ai import evaluation
     svc()  # ensure the warehouse exists
     res = evaluation.run_evaluation(ks=(5, k, 20), strategy=strategy,
@@ -366,6 +373,8 @@ def eval_models(k: int = 10, strategy: str = "last_n", include_kids: bool = True
     if grid:
         res["grid_search"] = evaluation.grid_search_hybrid(
             metric=f"ndcg@{k}", strategy=strategy, include_kids=include_kids)
+    res["ran_at"] = datetime.now().isoformat(timespec="seconds")
+    _last_eval = res
     return res
 
 

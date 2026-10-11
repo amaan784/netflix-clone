@@ -95,6 +95,17 @@
         <div class="chart-card"><h3>Retention by First-Watch Month</h3><div id="lake-retention"></div></div>
         <div class="chart-card"><h3>Quarantined Records</h3><div id="lake-quarantine"></div></div>
       </div>
+
+      <h2 class="view-title">Recommender Evaluation (offline)</h2>
+      <p class="view-sub">Each profile's latest titles are held out, every model is retrained on the rest, and each is scored on how well it ranks the held-out titles. Top Picks use the trained ranker: the hybrid shortlists 40 titles and the ranker orders them.</p>
+      <div class="lake-head">
+        <p id="eval-meta" class="view-sub eval-meta">Takes about ten seconds.</p>
+        <button id="eval-run" class="btn lake-run">Run evaluation</button>
+      </div>
+      <div class="charts-grid">
+        <div class="chart-card"><h3>Models at K = 10</h3><div id="eval-table"></div></div>
+        <div class="chart-card"><h3>What the Ranker Learned (weight per standard deviation)</h3><div id="eval-weights"></div></div>
+      </div>
     </main>
 
     <footer class="footer">
