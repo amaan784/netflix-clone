@@ -30,6 +30,7 @@ def main():
     import uvicorn
     print("=" * 60)
     print(" NetClone is starting...  ->  http://127.0.0.1:8000")
+    print(" Sign in with the demo account (see README) or sign up.")
     print("=" * 60)
     uvicorn.run("backend.main:app", host="127.0.0.1", port=8000, reload=False)
 

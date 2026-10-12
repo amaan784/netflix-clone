@@ -16,7 +16,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from paths import DB_PATH, FRONTEND_DIR, ROOT
-from backend import artwork, episodes, store, video
+from backend import artwork, auth, episodes, store, video
 from streaming.topics import WATCH_EVENTS, RATINGS
 
 
@@ -114,6 +114,8 @@ async def _lifespan(_app: FastAPI):
 
 
 app = FastAPI(title="Netflix Clone API", version="1.0.0", lifespan=_lifespan)
+app.add_middleware(auth.Guard)  # sign-in and profile ownership for every /api call
+app.include_router(auth.router)
 
 
 # request models
@@ -142,22 +144,7 @@ class AssistantBody(BaseModel):
     query: str
 
 
-# catalog / profiles
-@app.get("/api/profiles")
-def get_profiles():
-    svc()  # makes sure the warehouse exists
-    conn = sqlite3.connect(DB_PATH)
-    try:
-        rows = conn.execute("""
-            SELECT p.profile_id, p.profile_name, p.is_kids, p.avatar_hue, p.age_group
-            FROM dim_profile p JOIN dim_user u ON p.user_id = u.user_id
-            WHERE u.is_synthetic = 0 ORDER BY p.profile_id""").fetchall()
-    finally:
-        conn.close()
-    return [{"profile_id": r[0], "name": r[1], "is_kids": bool(r[2]),
-             "avatar_hue": r[3], "age_group": r[4]} for r in rows]
-
-
+# catalog (signing in and the profiles list live in backend/auth.py)
 @app.get("/api/genres")
 def get_genres():
     return svc().genres_list()

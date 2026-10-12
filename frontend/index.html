@@ -9,12 +9,35 @@
 </head>
 <body>
 
+  <!-- sign in / sign up -->
+  <section id="auth-gate" class="auth-gate hidden">
+    <div class="logo logo-big auth-logo">NETCLONE</div>
+    <form id="auth-form" class="auth-card">
+      <h1 id="auth-title">Sign In</h1>
+      <input id="auth-name" class="hidden" type="text" placeholder="Your name" autocomplete="name" maxlength="40">
+      <input id="auth-email" type="email" placeholder="Email address" autocomplete="email" required>
+      <input id="auth-password" type="password" placeholder="Password (8+ characters)" autocomplete="current-password" required minlength="8">
+      <div id="auth-error" class="auth-error"></div>
+      <button type="submit" id="auth-submit" class="btn auth-submit">Sign In</button>
+      <p class="auth-switch"><span id="auth-switch-text">New to NetClone?</span> <a id="auth-switch">Sign up now.</a></p>
+      <p class="auth-hint">The demo account's sign-in is in the README.</p>
+    </form>
+  </section>
+
   <!-- profile gate -->
-  <section id="profile-gate" class="profile-gate">
+  <section id="profile-gate" class="profile-gate hidden">
     <div class="logo logo-big">NETCLONE</div>
     <h1>Who's watching?</h1>
     <div id="profile-list" class="profile-list"></div>
+    <form id="new-profile" class="new-profile hidden">
+      <input id="new-profile-name" type="text" maxlength="20" placeholder="Profile name" required>
+      <label><input id="new-profile-kids" type="checkbox"> Kids profile</label>
+      <button type="submit" class="btn btn-play">Add</button>
+      <button type="button" id="new-profile-cancel" class="btn btn-info">Cancel</button>
+      <div id="new-profile-error" class="auth-error"></div>
+    </form>
     <p class="gate-hint">Pick a profile to get personalised recommendations.</p>
+    <a id="sign-out" class="sign-out">Sign out</a>
   </section>
 
   <!-- app -->
@@ -38,7 +61,14 @@
           <input id="search-input" type="text" placeholder="Search titles, genres, moods..." />
         </div>
         <button id="assistant-btn" class="ai-btn" title="Ask the AI concierge">✦ AI</button>
-        <div id="profile-chip" class="profile-chip" title="Switch profile"></div>
+        <div class="chip-wrap">
+          <div id="profile-chip" class="profile-chip" title="Account"></div>
+          <div id="account-menu" class="account-menu hidden">
+            <div id="account-email" class="account-email"></div>
+            <a id="menu-switch">Switch profile</a>
+            <a id="menu-sign-out">Sign out</a>
+          </div>
+        </div>
       </div>
     </header>
 

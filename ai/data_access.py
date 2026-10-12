@@ -79,6 +79,15 @@ def popularity_scores(events: pd.DataFrame) -> pd.DataFrame:
     return agg
 
 
+def profile_is_kids(profile_id: int) -> bool:
+    conn = _connect()
+    try:
+        row = conn.execute("SELECT is_kids FROM dim_profile WHERE profile_id = ?", (int(profile_id),)).fetchone()
+    finally:
+        conn.close()
+    return bool(row and row[0])
+
+
 def build_interactions(events: pd.DataFrame, ratings: pd.DataFrame) -> pd.DataFrame:
     """Collapse events and ratings into one affinity score per (profile_id, title_id)."""
     # watch signal: accumulate completion across sessions (rewatch => stronger)

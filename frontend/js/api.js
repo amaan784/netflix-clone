@@ -1,19 +1,32 @@
 // Thin fetch wrapper around the backend JSON API.
 const API = {
-  async get(path) {
-    const r = await fetch(path);
-    if (!r.ok) throw new Error(`${r.status} ${path}`);
+  onSignedOut: null,  // set by app.js: any 401 means the session is gone
+
+  async request(path, options) {
+    const r = await fetch(path, options);
+    if (r.status === 401 && API.onSignedOut && !path.startsWith("/api/auth/login")) API.onSignedOut();
+    if (!r.ok) {
+      const err = new Error(`${r.status} ${path}`);
+      err.status = r.status;
+      err.detail = (await r.json().catch(() => ({}))).detail;  // the server's message, if any
+      throw err;
+    }
     return r.json();
   },
-  async post(path, body) {
-    const r = await fetch(path, {
+  get(path) { return API.request(path); },
+  post(path, body) {
+    return API.request(path, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!r.ok) throw new Error(`${r.status} ${path}`);
-    return r.json();
   },
+
+  me: () => API.get("/api/auth/me"),
+  signIn: (email, password) => API.post("/api/auth/login", { email, password }),
+  signUp: (name, email, password) => API.post("/api/auth/signup", { name, email, password }),
+  signOut: () => API.post("/api/auth/logout", {}),
+  addProfile: (name, isKids) => API.post("/api/profiles", { name, is_kids: isKids }),
 
   profiles: () => API.get("/api/profiles"),
   home: (pid) => API.get(`/api/home?profile_id=${pid}`),

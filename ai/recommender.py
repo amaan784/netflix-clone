@@ -157,7 +157,8 @@ class RecommenderService:
         """Return a maturity filter predicate based on the profile's age group."""
         prof = self.frames["profiles"]
         row = prof[prof["profile_id"] == int(profile_id)]
-        is_kids = bool(row["is_kids"].iloc[0]) if len(row) else False
+        # a profile added since the models were trained isn't in the frames yet
+        is_kids = bool(row["is_kids"].iloc[0]) if len(row) else data_access.profile_is_kids(profile_id)
         if is_kids:
             return lambda rec: rec["maturity_rating"] not in MATURE_RATINGS
         return lambda rec: True

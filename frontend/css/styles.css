@@ -50,6 +50,43 @@ a { cursor: pointer; }
 .profile-avatar span { color: var(--muted); font-size: 18px; }
 .profile-avatar.kids .avatar-tile::after { content: "KIDS"; font-size: 11px; position: relative; top: 28px; }
 .gate-hint { color: #666; font-size: 14px; margin-top: 10px; }
+.profile-avatar.add .avatar-tile { background: transparent; border: 2px solid #555; color: #888; font-weight: 300; }
+.profile-avatar.add:hover .avatar-tile { color: #fff; border-color: #fff; }
+.new-profile { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: center; }
+.new-profile input[type=text] { background: #1c1c24; border: 1px solid #444; color: #fff;
+  padding: 10px 12px; border-radius: 4px; font-size: 15px; }
+.new-profile label { color: #ccc; font-size: 14px; }
+.new-profile .auth-error { width: 100%; text-align: center; }
+.sign-out { color: #888; font-size: 14px; border-bottom: 1px solid transparent; }
+.sign-out:hover { color: #fff; border-bottom-color: #fff; }
+
+/* sign in / sign up */
+.auth-gate { min-height: 100vh; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 26px; padding: 30px 16px;
+  background: radial-gradient(circle at 50% 0%, #2a0a0d, #050507 70%); }
+.auth-card { width: min(420px, 100%); background: rgba(0,0,0,.78); border-radius: 8px;
+  padding: 44px 48px 38px; display: flex; flex-direction: column; gap: 14px; }
+.auth-card h1 { font-size: 30px; margin-bottom: 8px; }
+.auth-card input { background: #333; border: none; border-radius: 4px; color: #fff;
+  padding: 15px 16px; font-size: 16px; }
+.auth-card input:focus { outline: 2px solid #e87c03; }
+.auth-submit { justify-content: center; background: var(--red); color: #fff; margin-top: 10px; padding: 14px; }
+.auth-submit:hover { background: var(--red-dark); }
+.auth-error { color: #e87c03; font-size: 14px; min-height: 18px; }
+.auth-switch { color: #8c8c8c; font-size: 15px; margin-top: 10px; }
+.auth-switch a { color: #fff; }
+.auth-switch a:hover { text-decoration: underline; }
+.auth-hint { color: #6d6d6d; font-size: 12px; }
+
+/* account menu under the profile chip */
+.chip-wrap { position: relative; }
+.profile-chip { cursor: pointer; }
+.account-menu { position: absolute; right: 0; top: 44px; min-width: 210px; background: rgba(12,12,16,.97);
+  border: 1px solid #2c2c35; border-radius: 6px; padding: 8px 0; z-index: 120; }
+.account-menu a { display: block; padding: 9px 16px; color: #ddd; font-size: 14px; }
+.account-menu a:hover { background: rgba(255,255,255,.07); color: #fff; }
+.account-email { padding: 6px 16px 10px; color: var(--muted); font-size: 12px; border-bottom: 1px solid #2c2c35;
+  margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; }
 
 /* navbar */
 .navbar {

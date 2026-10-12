@@ -7,29 +7,111 @@ const state = {
 
 const $ = (sel) => document.querySelector(sel);
 const el = (html) => { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstChild; };
-// for text that comes from outside the catalog (TMDB)
+// for text that comes from outside the catalog (TMDB, what people type)
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) =>
   ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 
-// boot
+// boot: signed in -> "Who's watching?", otherwise the sign-in screen
 async function init() {
+  wireGlobalUI();
+  API.onSignedOut = () => showAuth();
   const art = await API.artwork().catch(() => ({}));
   state.logos = new Set(art.logos || []);
   API.artVersion = encodeURIComponent(art.version || "none");
   if (art.attribution) $("#art-credit").textContent = art.attribution;
-  const profiles = await API.profiles();
+  const me = await API.me().catch(() => ({ account: null }));
+  if (me.account) showProfiles(me); else showAuth();
+}
+
+// sign in / sign up
+function showAuth(mode = "signin") {
+  if (!$("#player-modal").classList.contains("hidden")) closePlayer();
+  stopHeroPreview();
+  closeDetail();
+  closeAssistant();
+  state.profile = null;
+  state.mode = mode;
+  const signup = mode === "signup";
+  $("#auth-title").textContent = signup ? "Sign Up" : "Sign In";
+  $("#auth-submit").textContent = signup ? "Create Account" : "Sign In";
+  $("#auth-name").classList.toggle("hidden", !signup);
+  $("#auth-name").required = signup;
+  $("#auth-password").autocomplete = signup ? "new-password" : "current-password";
+  $("#auth-switch-text").textContent = signup ? "Already have an account?" : "New to NetClone?";
+  $("#auth-switch").textContent = signup ? "Sign in." : "Sign up now.";
+  $("#auth-error").textContent = "";
+  for (const id of ["#app", "#profile-gate"]) $(id).classList.add("hidden");
+  $("#auth-gate").classList.remove("hidden");
+}
+
+async function submitAuth(e) {
+  e.preventDefault();
+  const email = $("#auth-email").value.trim(), password = $("#auth-password").value;
+  try {
+    const me = state.mode === "signup"
+      ? await API.signUp($("#auth-name").value.trim(), email, password)
+      : await API.signIn(email, password);
+    $("#auth-password").value = "";
+    showProfiles(me);
+  } catch (err) {
+    $("#auth-error").textContent = err.detail || "Something went wrong. Please try again.";
+  }
+}
+
+async function signOut() {
+  await API.signOut().catch(() => {});
+  showAuth();
+}
+
+// "Who's watching?"
+function showProfiles(me) {
+  if (!me.account) return showAuth();  // the session ran out
+  state.account = me.account;
+  $("#account-email").textContent = me.account.email;
   const list = $("#profile-list");
   list.innerHTML = "";
-  profiles.forEach((p) => {
+  me.profiles.forEach((p) => {
     const tile = el(`
       <div class="profile-avatar ${p.is_kids ? "kids" : ""}">
-        <div class="avatar-tile" style="background:hsl(${p.avatar_hue},55%,40%)">${p.name[0]}</div>
-        <span>${p.name}</span>
+        <div class="avatar-tile" style="background:hsl(${p.avatar_hue},55%,40%)">${esc(p.name[0])}</div>
+        <span>${esc(p.name)}</span>
       </div>`);
     tile.addEventListener("click", () => selectProfile(p));
     list.appendChild(tile);
   });
-  wireGlobalUI();
+  if (me.profiles.length < 5) {
+    const add = el(`<div class="profile-avatar add"><div class="avatar-tile">+</div><span>Add Profile</span></div>`);
+    add.addEventListener("click", () => {
+      $("#new-profile").classList.remove("hidden");
+      $("#new-profile-name").focus();
+    });
+    list.appendChild(add);
+  }
+  $("#new-profile").classList.add("hidden");
+  for (const id of ["#app", "#auth-gate"]) $(id).classList.add("hidden");
+  $("#profile-gate").classList.remove("hidden");
+}
+
+async function submitNewProfile(e) {
+  e.preventDefault();
+  try {
+    await API.addProfile($("#new-profile-name").value.trim(), $("#new-profile-kids").checked);
+    $("#new-profile-name").value = "";
+    $("#new-profile-kids").checked = false;
+    $("#new-profile-error").textContent = "";
+    showProfiles(await API.me());
+  } catch (err) {
+    $("#new-profile-error").textContent = err.detail || "Couldn't add that profile.";
+  }
+}
+
+async function switchProfile() {
+  $("#account-menu").classList.add("hidden");
+  if (!$("#player-modal").classList.contains("hidden")) await closePlayer();
+  stopHeroPreview();
+  closeDetail();
+  closeAssistant();
+  showProfiles(await API.me());
 }
 
 function selectProfile(p) {
@@ -39,6 +121,9 @@ function selectProfile(p) {
   const chip = $("#profile-chip");
   chip.textContent = p.name[0];
   chip.style.background = `hsl(${p.avatar_hue},55%,40%)`;
+  // a new conversation for each profile
+  $("#assistant-log").innerHTML = "";
+  delete $("#assistant-log").dataset.greeted;
   showView("home");
   loadHome();
 }
@@ -378,7 +463,8 @@ function userMessage(text) {
   $("#assistant-log").appendChild(m); scrollLog();
 }
 function botMessage(markup, items) {
-  const m = el(`<div class="msg bot">${mdBold(markup)}</div>`);
+  // escaped first: replies can repeat what was typed, and greetings use the profile name
+  const m = el(`<div class="msg bot">${mdBold(esc(markup))}</div>`);
   $("#assistant-log").appendChild(m);
   if (items && items.length) {
     const cards = el(`<div class="msg-cards"></div>`);
@@ -553,6 +639,18 @@ function toast(msg) {
 function maybeReloadHome() { if (state.homeStale) loadHome(); }
 
 function wireGlobalUI() {
+  $("#auth-form").addEventListener("submit", submitAuth);
+  $("#auth-switch").addEventListener("click", () => showAuth(state.mode === "signup" ? "signin" : "signup"));
+  $("#new-profile").addEventListener("submit", submitNewProfile);
+  $("#new-profile-cancel").addEventListener("click", () => $("#new-profile").classList.add("hidden"));
+  $("#sign-out").addEventListener("click", signOut);
+  $("#menu-sign-out").addEventListener("click", signOut);
+  $("#menu-switch").addEventListener("click", switchProfile);
+  $("#profile-chip").addEventListener("click", (e) => {
+    e.stopPropagation();
+    $("#account-menu").classList.toggle("hidden");
+  });
+  document.addEventListener("click", () => $("#account-menu").classList.add("hidden"));
   $("#search-input").addEventListener("input", onSearchInput);
   $("#assistant-btn").addEventListener("click", openAssistant);
   $("#assistant-close").addEventListener("click", closeAssistant);

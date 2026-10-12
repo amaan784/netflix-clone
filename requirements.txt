@@ -21,6 +21,6 @@ kafka-python-ng==2.2.*
 # Video: a bundled ffmpeg for media.ingest (not needed if ffmpeg is already installed)
 imageio-ffmpeg==0.6.*
 
-# Tests
+# Tests (httpx drives FastAPI's TestClient)
 pytest==8.*
-
+httpx==0.*
