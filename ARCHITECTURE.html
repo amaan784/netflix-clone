@@ -75,7 +75,9 @@
     <a href="#architecture">Architecture</a>
     <a href="#frontend">Frontend</a>
     <a href="#backend">Backend</a>
+    <a href="#accounts">Accounts</a>
     <a href="#data">Data Engineering</a>
+    <a href="#lakehouse">Lakehouse</a>
     <a href="#ai">AI / ML</a>
     <a href="#streaming">Streaming</a>
     <a href="#video">Video</a>
@@ -88,231 +90,354 @@
 
   <div class="hero" id="overview">
     <h1>NetClone Architecture &amp; Design</h1>
-    <p class="lead">A local, fully offline Netflix clone built to showcase a complete data platform:
-    a Netflix-style web app on top of a dimensional data warehouse, a hybrid recommender, semantic
-    search, a natural-language assistant, and an event-streaming pipeline.</p>
+    <p class="lead">A local Netflix clone built to show a complete data platform: a Netflix-style web
+    app with accounts, on top of a dimensional data warehouse and a DuckDB lakehouse, a two-stage
+    recommender with a trained ranking model, semantic search, a natural-language assistant, an
+    event-streaming pipeline, and adaptive video streaming with series episodes.</p>
     <div class="badges">
       <span class="badge">FastAPI</span>
       <span class="badge">SQLite star schema</span>
-      <span class="badge">scikit-learn (TF-IDF + SVD)</span>
+      <span class="badge">DuckDB + Parquet lakehouse</span>
+      <span class="badge">scikit-learn (TF-IDF, SVD, learned ranker)</span>
       <span class="badge">pandas / numpy</span>
       <span class="badge">Kafka-style streaming</span>
       <span class="badge">Vanilla-JS SPA</span>
       <span class="badge">HLS video (ffmpeg + hls.js)</span>
-      <span class="badge">No cloud · no internet</span>
+      <span class="badge">Sessions + scrypt</span>
+      <span class="badge">No cloud services</span>
     </div>
-    <p style="margin-top:18px"><span class="pill real">REAL</span> app, data warehouse, ML models, ETL, analytics, streaming pipeline, adaptive HLS video &nbsp;
-       <span class="pill sim">SIMULATED</span> synthetic viewer history; titles play openly licensed stand-in films</p>
+    <p style="margin-top:18px"><span class="pill real">REAL</span> app, accounts, data warehouse, lakehouse, ML models, ETL, analytics, streaming pipeline, adaptive HLS video &nbsp;
+       <span class="pill sim">SIMULATED</span> synthetic viewer history; titles and episodes play openly licensed stand-in films</p>
   </div>
 
   <!-- ARCHITECTURE -->
   <section id="architecture">
     <h2><span class="num">01</span>System architecture</h2>
-    <p>Three layers behind one FastAPI process. The browser talks only to the JSON API; the API
-    serves the recommender, the warehouse, and the streaming pipeline. Everything runs on
-    <code>localhost</code>.</p>
+    <p>One FastAPI process. The browser talks only to the JSON API (behind a sign-in guard) and the
+    static media files; the API serves the recommender, the warehouse, the lakehouse and the streaming
+    pipeline. Everything runs on <code>localhost</code>; the only optional network use is the one-time
+    download of the films and, with a TMDB key, of poster art.</p>
 
     <div class="figure">
-      <svg viewBox="0 0 900 470" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="13">
+      <svg viewBox="0 0 900 500" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="13">
         <defs>
           <marker id="arr" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto">
             <path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/>
           </marker>
         </defs>
         <!-- Browser -->
-        <rect x="320" y="20" width="260" height="62" rx="8" fill="#1a1a22" stroke="#e50914"/>
-        <text x="450" y="46" text-anchor="middle" fill="#fff" font-weight="700">Browser SPA (frontend/)</text>
-        <text x="450" y="64" text-anchor="middle" fill="#a0a0a8" font-size="11">hero · rows · detail · player · search · AI chat · analytics</text>
+        <rect x="300" y="18" width="300" height="62" rx="8" fill="#1a1a22" stroke="#e50914"/>
+        <text x="450" y="44" text-anchor="middle" fill="#fff" font-weight="700">Browser SPA (frontend/)</text>
+        <text x="450" y="62" text-anchor="middle" fill="#a0a0a8" font-size="11">sign-in · rows · detail + episodes · player · AI chat · analytics</text>
 
-        <!-- arrow down -->
-        <line x1="450" y1="82" x2="450" y2="118" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <text x="462" y="104" fill="#a0a0a8" font-size="11">REST + SVG posters</text>
+        <line x1="450" y1="80" x2="450" y2="112" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <text x="462" y="101" fill="#a0a0a8" font-size="11">JSON API (session cookie) + HLS files + images</text>
 
         <!-- Backend -->
-        <rect x="250" y="120" width="400" height="58" rx="8" fill="#1a1a22" stroke="#5aa9ff"/>
-        <text x="450" y="144" text-anchor="middle" fill="#fff" font-weight="700">FastAPI backend (backend/)</text>
-        <text x="450" y="162" text-anchor="middle" fill="#a0a0a8" font-size="11">routes · request models · procedural posters · write paths</text>
+        <rect x="200" y="114" width="500" height="62" rx="8" fill="#1a1a22" stroke="#5aa9ff"/>
+        <text x="450" y="138" text-anchor="middle" fill="#fff" font-weight="700">FastAPI backend (backend/)</text>
+        <text x="450" y="157" text-anchor="middle" fill="#a0a0a8" font-size="11">auth guard · routes · episodes · video · artwork (TMDB or SVG) · write paths</text>
 
-        <!-- three services -->
-        <!-- AI -->
-        <line x1="360" y1="178" x2="200" y2="232" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <rect x="40" y="234" width="300" height="92" rx="8" fill="#141418" stroke="#46d369"/>
-        <text x="190" y="258" text-anchor="middle" fill="#fff" font-weight="700">AI / ML service (ai/)</text>
-        <text x="190" y="278" text-anchor="middle" fill="#a0a0a8" font-size="11">content-based · collaborative (SVD)</text>
-        <text x="190" y="294" text-anchor="middle" fill="#a0a0a8" font-size="11">hybrid ranker · semantic search</text>
-        <text x="190" y="310" text-anchor="middle" fill="#a0a0a8" font-size="11">NL assistant</text>
+        <!-- four services -->
+        <line x1="290" y1="176" x2="125" y2="228" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <rect x="20" y="230" width="210" height="96" rx="8" fill="#141418" stroke="#46d369"/>
+        <text x="125" y="254" text-anchor="middle" fill="#fff" font-weight="700">AI / ML (ai/)</text>
+        <text x="125" y="274" text-anchor="middle" fill="#a0a0a8" font-size="11">content · SVD · item-item · ALS</text>
+        <text x="125" y="290" text-anchor="middle" fill="#a0a0a8" font-size="11">hybrid shortlist + learned ranker</text>
+        <text x="125" y="306" text-anchor="middle" fill="#a0a0a8" font-size="11">search · assistant · evaluation</text>
 
-        <!-- Streaming -->
-        <line x1="450" y1="178" x2="450" y2="232" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <rect x="360" y="234" width="180" height="92" rx="8" fill="#141418" stroke="#ffb14a"/>
-        <text x="450" y="258" text-anchor="middle" fill="#fff" font-weight="700">Streaming (streaming/)</text>
-        <text x="450" y="278" text-anchor="middle" fill="#a0a0a8" font-size="11">producer -> topic</text>
-        <text x="450" y="294" text-anchor="middle" fill="#a0a0a8" font-size="11">consumer -> sink</text>
-        <text x="450" y="310" text-anchor="middle" fill="#a0a0a8" font-size="11">live trending</text>
+        <line x1="400" y1="176" x2="345" y2="228" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <rect x="245" y="230" width="200" height="96" rx="8" fill="#141418" stroke="#ffb14a"/>
+        <text x="345" y="254" text-anchor="middle" fill="#fff" font-weight="700">Streaming (streaming/)</text>
+        <text x="345" y="274" text-anchor="middle" fill="#a0a0a8" font-size="11">producer -> topics</text>
+        <text x="345" y="290" text-anchor="middle" fill="#a0a0a8" font-size="11">warehouse-sink · lake-sink</text>
+        <text x="345" y="306" text-anchor="middle" fill="#a0a0a8" font-size="11">live trending</text>
 
-        <!-- Data eng -->
-        <line x1="540" y1="178" x2="700" y2="232" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <rect x="560" y="234" width="300" height="92" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="710" y="258" text-anchor="middle" fill="#fff" font-weight="700">Data engineering (data_engineering/)</text>
-        <text x="710" y="278" text-anchor="middle" fill="#a0a0a8" font-size="11">ETL pipeline · data quality</text>
-        <text x="710" y="294" text-anchor="middle" fill="#a0a0a8" font-size="11">star schema · analytics</text>
-        <text x="710" y="310" text-anchor="middle" fill="#a0a0a8" font-size="11">synthetic data generator</text>
+        <line x1="500" y1="176" x2="560" y2="228" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <rect x="460" y="230" width="200" height="96" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="560" y="254" text-anchor="middle" fill="#fff" font-weight="700">Data engineering</text>
+        <text x="560" y="274" text-anchor="middle" fill="#a0a0a8" font-size="11">ETL · 21 data-quality checks</text>
+        <text x="560" y="290" text-anchor="middle" fill="#a0a0a8" font-size="11">star schema · accounts</text>
+        <text x="560" y="306" text-anchor="middle" fill="#a0a0a8" font-size="11">TMDB enrichment</text>
 
-        <!-- DB -->
-        <line x1="190" y1="326" x2="430" y2="392" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <line x1="450" y1="326" x2="450" y2="392" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <line x1="710" y1="326" x2="470" y2="392" stroke="#7a7a86" marker-end="url(#arr)"/>
-        <rect x="300" y="394" width="300" height="56" rx="8" fill="#1a1a22" stroke="#fff"/>
-        <text x="450" y="418" text-anchor="middle" fill="#fff" font-weight="700">SQLite warehouse - data/netflix.db</text>
-        <text x="450" y="436" text-anchor="middle" fill="#a0a0a8" font-size="11">dim_* · fact_* · bridge · my_list</text>
+        <line x1="610" y1="176" x2="775" y2="228" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <rect x="675" y="230" width="205" height="96" rx="8" fill="#141418" stroke="#d6ad2e"/>
+        <text x="777" y="254" text-anchor="middle" fill="#fff" font-weight="700">Lakehouse (lakehouse/)</text>
+        <text x="777" y="274" text-anchor="middle" fill="#a0a0a8" font-size="11">bronze -> silver -> gold</text>
+        <text x="777" y="290" text-anchor="middle" fill="#a0a0a8" font-size="11">quarantine · sessionisation</text>
+        <text x="777" y="306" text-anchor="middle" fill="#a0a0a8" font-size="11">DuckDB SQL</text>
+
+        <!-- storage -->
+        <line x1="125" y1="326" x2="290" y2="396" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <line x1="345" y1="326" x2="330" y2="396" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <line x1="560" y1="326" x2="380" y2="396" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <line x1="345" y1="326" x2="640" y2="396" stroke="#7a7a86" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+        <line x1="777" y1="326" x2="700" y2="396" stroke="#7a7a86" marker-end="url(#arr)"/>
+        <rect x="180" y="398" width="270" height="62" rx="8" fill="#1a1a22" stroke="#fff"/>
+        <text x="315" y="422" text-anchor="middle" fill="#fff" font-weight="700">SQLite warehouse - data/netflix.db</text>
+        <text x="315" y="441" text-anchor="middle" fill="#a0a0a8" font-size="11">dim_* · fact_* · bridge · my_list · app_*</text>
+        <rect x="560" y="398" width="270" height="62" rx="8" fill="#1a1a22" stroke="#fff"/>
+        <text x="695" y="422" text-anchor="middle" fill="#fff" font-weight="700">Parquet lake - data/lake/</text>
+        <text x="695" y="441" text-anchor="middle" fill="#a0a0a8" font-size="11">bronze · silver · gold (+ data/media, data/tmdb)</text>
+        <text x="505" y="488" text-anchor="middle" fill="#a0a0a8" font-size="11">dashed: the lake reads the event stream with its own consumer group</text>
       </svg>
-      <div class="cap">Figure 1. All layers run in one process; the SQLite warehouse is the shared source of truth.</div>
+      <div class="cap">Figure 1. One process. The warehouse is the serving database; the lake keeps the raw history and the analytical tables.</div>
     </div>
 
     <h3>Repository layout</h3>
 <pre><code>netflix clone/
 ├── run.py                  launcher (build DB + serve; --rebuild / --etl / --kafka)
 ├── paths.py                shared path config
+├── .env.example            TMDB key template (copy to .env)
 ├── docker-compose.yml      single-node Kafka (KRaft) for the real streaming backend
-├── media/                  library (films, quality ladder) · ingest (download + HLS transcode)
-├── data_engineering/       catalog_seed · generate_data · schema.sql · pipeline
-│                           · data_quality · analytics
-├── ai/                     data_access · content_based · collaborative
-│                           · semantic_search · recommender · assistant
-├── streaming/              broker · producer · consumer · kafka_backend
-│                           · backends · topics · pipeline
-├── backend/                main (FastAPI) · store · video · poster
+├── data_engineering/       catalog_seed · generate_data · schema.sql · pipeline · data_quality
+│                           · accounts · tmdb · analytics
+├── lakehouse/              bronze · silver · gold · build
+├── ai/                     data_access · content_based · collaborative · ranker
+│                           · semantic_search · recommender · evaluation · assistant
+├── streaming/              broker · producer · consumer · kafka_backend · backends · topics · pipeline
+├── media/                  library (films, intro/credits marks, subtitles) · ingest · extras
+├── backend/                main · auth · episodes · store · video · artwork · poster
 ├── frontend/               index.html · css/styles.css · js/{api,player,app}.js · vendor/hls.min.js
-└── data/                   netflix.db · logs/ · streaming/ (event logs) · media/ (HLS streams)</code></pre>
+└── data/                   netflix.db · lake/ · media/ · tmdb/ · streaming/ · logs/   (all generated)</code></pre>
   </section>
 
   <!-- FRONTEND -->
   <section id="frontend">
     <h2><span class="num">02</span>Frontend</h2>
     <p>A dependency-free single-page app (vanilla JS, no build step). <code>api.js</code> is a thin
-    fetch wrapper; <code>player.js</code> is the video player; <code>app.js</code> holds the rest of the view logic and state.</p>
+    fetch wrapper (a 401 anywhere sends you back to sign-in); <code>player.js</code> is the video
+    player; <code>app.js</code> holds the rest of the view logic and state. Frontend files are served
+    with <code>no-cache</code> so browsers revalidate them after an update.</p>
     <div class="grid2">
-      <div class="card"><h4>Profiles</h4><p>"Who's watching?" gate. Recommendations are per-profile; a Kids profile filters out mature content.</p></div>
-      <div class="card"><h4>Home</h4><p>Hero banner + personalised rails: Continue Watching (with a resume bar), Top Picks, Trending, Critically Acclaimed, New Releases, "Because you watched X", genre rows, and "Top 10 in your country".</p></div>
-      <div class="card"><h4>Detail modal</h4><p>Synopsis, cast, real warehouse stats (viewers / watch-hours / completion), rating buttons, My List, "More Like This".</p></div>
-      <div class="card"><h4>Video player</h4><p>Adaptive HLS playback with a quality picker and resume. Reports the seconds actually watched, which feeds the recommender and Continue Watching.</p></div>
-      <div class="card"><h4>Search</h4><p>Live semantic search as you type.</p></div>
-      <div class="card"><h4>AI Concierge</h4><p>Chat panel that returns grounded recommendations with poster cards.</p></div>
-      <div class="card"><h4>Analytics</h4><p>KPI cards, bar charts from the warehouse, and the live streaming-pipeline panel.</p></div>
-      <div class="card"><h4>Posters</h4><p>Every title's key art is a procedurally generated SVG - no external image assets.</p></div>
+      <div class="card"><h4>Accounts</h4><p>Sign-in and sign-up screens, a "Who's watching?" gate with Add Profile (kids profiles never see mature titles), and an account menu to switch profile or sign out.</p></div>
+      <div class="card"><h4>Home</h4><p>A banner with the title's art and logo that starts a muted preview of the video after a few seconds, then rails: Continue Watching (episode-aware), My List, Top Picks, Trending, Critically Acclaimed, New Releases, "Because you watched X", genres, "Top 10 in your country".</p></div>
+      <div class="card"><h4>Detail view</h4><p>Synopsis, cast, warehouse stats, ratings, My List, "More Like This"; for a series, a season picker and an episode list with thumbnails and progress. Play starts or resumes the right episode.</p></div>
+      <div class="card"><h4>Video player</h4><p>Custom controls: seek bar with preview frames, back/forward 10 s, volume, subtitles, quality, full screen, keyboard shortcuts. Skip Intro and a Next Episode countdown for series.</p></div>
+      <div class="card"><h4>Search and assistant</h4><p>Live semantic search as you type; a chat panel that answers with poster cards (text is escaped, so a typed query can't inject markup).</p></div>
+      <div class="card"><h4>Analytics</h4><p>Warehouse KPIs and charts, the live streaming panel, the lakehouse layers and gold tables, and the recommender evaluation with the ranker's learned weights.</p></div>
     </div>
   </section>
 
   <!-- BACKEND -->
   <section id="backend">
     <h2><span class="num">03</span>Backend</h2>
-    <p>FastAPI serves the SPA, the JSON API, and the procedural posters. On startup it warms the
-    recommender models and starts the streaming consumer. Singletons are created lazily and shared
-    across requests.</p>
+    <p>FastAPI serves the SPA, the JSON API and the images. On startup it warms the recommender
+    (including training the ranker), starts the streaming consumer, and runs the lakehouse once in the
+    background. Singletons are created lazily and shared across requests.</p>
     <ul>
-      <li><b>main.py</b> - routes, Pydantic request models, model/streaming bootstrap, static mount.</li>
-      <li><b>store.py</b> - operational writes (watch events, ratings, My List) into the warehouse.</li>
-      <li><b>video.py</b> - <code>/api/play/{id}</code> (stream URL, duration, resume point) and the <code>/media/*</code> file server for HLS playlists and segments.</li>
-      <li><b>poster.py</b> - deterministic SVG poster from each title's stored hue + metadata.</li>
+      <li><b>main.py</b> - routes, Pydantic request models, model/streaming/lakehouse bootstrap, static mount.</li>
+      <li><b>auth.py</b> - sessions, the sign-in routes, profile management, and the guard in front of <code>/api</code>.</li>
+      <li><b>episodes.py</b> - seasons, the episode Play should start (resume, next, or the first), the next episode.</li>
+      <li><b>store.py</b> - operational writes (watch events, ratings, My List) and Continue Watching.</li>
+      <li><b>video.py</b> - <code>/api/play/{id}</code> and the <code>/media/*</code> file server.</li>
+      <li><b>artwork.py</b> / <b>poster.py</b> - TMDB art when it has been downloaded, a generated SVG otherwise. Image URLs carry the art's version, so new art shows up without a stale browser cache.</li>
+    </ul>
+  </section>
+
+  <!-- ACCOUNTS -->
+  <section id="accounts">
+    <h2><span class="num">04</span>Accounts and security</h2>
+    <p>Every <code>/api</code> call goes through a guard (plain ASGI middleware) that needs a signed-in
+    session, apart from the sign-in calls and the images. A call that names a <code>profile_id</code>, in
+    the query string or the JSON body, must name a profile on the signed-in account; the guard reads the
+    body, checks it, and hands it on untouched, so the route functions themselves don't change.</p>
+    <div class="figure">
+      <svg viewBox="0 0 880 150" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+        <defs><marker id="a6" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker></defs>
+        <rect x="20" y="45" width="170" height="60" rx="8" fill="#141418" stroke="#e50914"/>
+        <text x="105" y="70" text-anchor="middle" fill="#fff">browser</text>
+        <text x="105" y="88" text-anchor="middle" fill="#a0a0a8" font-size="11">HttpOnly session cookie</text>
+        <line x1="190" y1="75" x2="258" y2="75" stroke="#7a7a86" marker-end="url(#a6)"/>
+        <rect x="260" y="30" width="250" height="90" rx="8" fill="#1a1a22" stroke="#5aa9ff"/>
+        <text x="385" y="54" text-anchor="middle" fill="#fff" font-weight="700">Guard</text>
+        <text x="385" y="74" text-anchor="middle" fill="#a0a0a8" font-size="11">session: sha256(token) known, not expired</text>
+        <text x="385" y="91" text-anchor="middle" fill="#a0a0a8" font-size="11">profile_id (query or body) on this account?</text>
+        <text x="385" y="108" text-anchor="middle" fill="#a0a0a8" font-size="11">no session -> 401 · not yours -> 403</text>
+        <line x1="510" y1="75" x2="578" y2="75" stroke="#7a7a86" marker-end="url(#a6)"/>
+        <rect x="580" y="45" width="280" height="60" rx="8" fill="#141418" stroke="#46d369"/>
+        <text x="720" y="70" text-anchor="middle" fill="#fff">route (unchanged)</text>
+        <text x="720" y="88" text-anchor="middle" fill="#a0a0a8" font-size="11">request.state.account for the profile routes</text>
+      </svg>
+      <div class="cap">Figure 2. Every API call is checked before it reaches a route.</div>
+    </div>
+    <ul>
+      <li><b>Passwords</b> are hashed with scrypt (standard library) and a random salt per password, and
+      compared in constant time. A wrong email takes as long as a wrong password.</li>
+      <li><b>Sessions</b> are a random 256-bit token in an HttpOnly, SameSite=Lax cookie (page scripts
+      can't read it; other sites can't make the browser send it with a POST). Only its SHA-256 is
+      stored, so a copy of the database holds no usable sessions. They last 30 days.</li>
+      <li><b>Rate limiting</b>: five failed sign-ins for an email in ten minutes and further attempts get 429.</li>
+      <li><b>Through rebuilds</b>: <code>app_account</code> and <code>app_session</code> are operational
+      tables the ETL never drops, and people who sign up get user and profile ids from 100000, clear of
+      the generated population, so a rebuild regenerates everything else and puts them back.</li>
     </ul>
   </section>
 
   <!-- DATA ENGINEERING -->
   <section id="data">
-    <h2><span class="num">04</span>Data engineering</h2>
-    <p>A logged, idempotent ETL builds a Kimball-style dimensional model. Since the clone is offline,
-    a seeded generator simulates a viewer population with latent genre tastes, producing a realistic
-    interaction log for the models to learn from.</p>
+    <h2><span class="num">05</span>Data engineering</h2>
+    <p>A logged, idempotent ETL builds a Kimball-style dimensional model. A seeded generator simulates
+    a viewer population with latent genre tastes, producing an interaction log for the models to learn
+    from. The warehouse carries a schema version; an older one is rebuilt automatically after a schema change.</p>
 
     <h3>ETL stages</h3>
     <table>
       <tr><th>Stage</th><th>What happens</th></tr>
-      <tr><td><b>Extract</b></td><td>Curated catalog (60+ titles) + a generated population of ~280 viewers who produce ~11k watch events and ~4k ratings.</td></tr>
-      <tr><td><b>Transform</b></td><td>Surrogate keys, derived attributes (decade, weekend flag), genre normalisation into a bridge table, a calendar date dimension.</td></tr>
-      <tr><td><b>Load</b></td><td>Bulk insert into the SQLite star schema (idempotent rebuild).</td></tr>
-      <tr><td><b>Validate</b></td><td>13 data-quality checks - referential integrity, value ranges, null/blank, uniqueness, "every title has a genre". The run fails if any check fails.</td></tr>
+      <tr><td><b>Extract</b></td><td>Curated catalog (61 titles, with real season sizes for the 32 series) + a generated population of ~280 viewers. A film session is one watch event; a series session is a binge of consecutive episodes, picking up where the viewer left off.</td></tr>
+      <tr><td><b>Transform</b></td><td>Surrogate keys, 855 episodes, derived attributes (decade, weekend flag), genre normalisation into a bridge table, a calendar date dimension.</td></tr>
+      <tr><td><b>Load</b></td><td>Bulk insert into the SQLite star schema. App-made users and profiles are kept and put back; the demo login is created if missing.</td></tr>
+      <tr><td><b>Enrich</b></td><td>If TMDB data has been fetched, real episode names and synopses replace "Episode N".</td></tr>
+      <tr><td><b>Validate</b></td><td>21 checks: referential integrity (events to titles, profiles, dates, episodes), value ranges, null/blank, uniqueness, every series has episodes numbered 1..n per season, an event's episode belongs to its title, lineage values, every login belongs to a user. The run fails if any check fails.</td></tr>
     </table>
 
     <h3>Star schema</h3>
     <div class="figure">
-      <svg viewBox="0 0 880 420" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
-        <!-- center facts -->
-        <rect x="350" y="80" width="180" height="86" rx="8" fill="#2a1014" stroke="#e50914"/>
-        <text x="440" y="102" text-anchor="middle" fill="#fff" font-weight="700">fact_watch_event</text>
-        <text x="440" y="122" text-anchor="middle" fill="#cfcfcf" font-size="11">watch_seconds</text>
-        <text x="440" y="138" text-anchor="middle" fill="#cfcfcf" font-size="11">completion · completed</text>
-        <text x="440" y="154" text-anchor="middle" fill="#cfcfcf" font-size="11">device · FKs</text>
+      <svg viewBox="0 0 880 470" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+        <rect x="350" y="120" width="180" height="96" rx="8" fill="#2a1014" stroke="#e50914"/>
+        <text x="440" y="142" text-anchor="middle" fill="#fff" font-weight="700">fact_watch_event</text>
+        <text x="440" y="162" text-anchor="middle" fill="#cfcfcf" font-size="11">watch_seconds · completion</text>
+        <text x="440" y="178" text-anchor="middle" fill="#cfcfcf" font-size="11">episode_id (series) · device</text>
+        <text x="440" y="194" text-anchor="middle" fill="#cfcfcf" font-size="11">origin · FKs</text>
 
-        <rect x="350" y="250" width="180" height="70" rx="8" fill="#2a1014" stroke="#e50914"/>
-        <text x="440" y="272" text-anchor="middle" fill="#fff" font-weight="700">fact_rating</text>
-        <text x="440" y="292" text-anchor="middle" fill="#cfcfcf" font-size="11">rating (1-5)</text>
-        <text x="440" y="308" text-anchor="middle" fill="#cfcfcf" font-size="11">FKs</text>
+        <rect x="350" y="290" width="180" height="70" rx="8" fill="#2a1014" stroke="#e50914"/>
+        <text x="440" y="312" text-anchor="middle" fill="#fff" font-weight="700">fact_rating</text>
+        <text x="440" y="332" text-anchor="middle" fill="#cfcfcf" font-size="11">rating (1-5)</text>
+        <text x="440" y="348" text-anchor="middle" fill="#cfcfcf" font-size="11">origin · FKs</text>
 
-        <!-- dims -->
-        <rect x="60" y="30" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="140" y="58" text-anchor="middle" fill="#fff">dim_title</text>
-        <rect x="60" y="180" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="140" y="208" text-anchor="middle" fill="#fff">dim_genre</text>
-        <rect x="60" y="320" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="140" y="348" text-anchor="middle" fill="#fff">dim_date</text>
-        <rect x="660" y="30" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="740" y="58" text-anchor="middle" fill="#fff">dim_user</text>
-        <rect x="660" y="180" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
-        <text x="740" y="208" text-anchor="middle" fill="#fff">dim_profile</text>
-        <rect x="660" y="320" width="160" height="46" rx="8" fill="#141418" stroke="#7a7a86"/>
-        <text x="740" y="342" text-anchor="middle" fill="#fff">bridge_title_genre</text>
-        <text x="740" y="358" text-anchor="middle" fill="#a0a0a8" font-size="10">title ↔ genre (M:N)</text>
+        <rect x="360" y="20" width="160" height="56" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="440" y="44" text-anchor="middle" fill="#fff">dim_episode</text>
+        <text x="440" y="62" text-anchor="middle" fill="#a0a0a8" font-size="10">season · number · title · runtime</text>
 
-        <!-- links -->
+        <rect x="60" y="50" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="140" y="78" text-anchor="middle" fill="#fff">dim_title</text>
+        <rect x="60" y="200" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="140" y="228" text-anchor="middle" fill="#fff">dim_genre</text>
+        <rect x="60" y="340" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="140" y="368" text-anchor="middle" fill="#fff">dim_date</text>
+        <rect x="660" y="50" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="740" y="78" text-anchor="middle" fill="#fff">dim_user</text>
+        <rect x="660" y="200" width="160" height="46" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="740" y="228" text-anchor="middle" fill="#fff">dim_profile</text>
+        <rect x="660" y="340" width="160" height="46" rx="8" fill="#141418" stroke="#7a7a86"/>
+        <text x="740" y="362" text-anchor="middle" fill="#fff">bridge_title_genre</text>
+        <text x="740" y="378" text-anchor="middle" fill="#a0a0a8" font-size="10">title - genre (M:N)</text>
+
         <g stroke="#5a5a66">
-          <line x1="220" y1="53" x2="350" y2="110"/>
-          <line x1="220" y1="203" x2="350" y2="130"/>
-          <line x1="220" y1="343" x2="350" y2="150"/>
-          <line x1="660" y1="203" x2="530" y2="120"/>
-          <line x1="660" y1="53" x2="530" y2="110"/>
-          <line x1="350" y1="285" x2="220" y2="203"/>
-          <line x1="530" y1="285" x2="660" y2="203"/>
-          <line x1="530" y1="280" x2="660" y2="60"/>
+          <line x1="440" y1="76" x2="440" y2="120"/>
+          <line x1="360" y1="48" x2="220" y2="70"/>
+          <line x1="220" y1="73" x2="350" y2="150"/>
+          <line x1="220" y1="363" x2="350" y2="190"/>
+          <line x1="660" y1="223" x2="530" y2="168"/>
+          <line x1="660" y1="73" x2="660" y2="200"/>
+          <line x1="350" y1="325" x2="220" y2="363"/>
+          <line x1="530" y1="325" x2="660" y2="223"/>
+          <line x1="220" y1="223" x2="660" y2="363"/>
         </g>
-        <text x="140" y="392" text-anchor="middle" fill="#a0a0a8" font-size="11">dimensions describe who / what / when</text>
-        <text x="440" y="200" text-anchor="middle" fill="#a0a0a8" font-size="11">facts hold the measures</text>
+        <rect x="200" y="410" width="480" height="40" rx="8" fill="#101015" stroke="#3a3a44"/>
+        <text x="440" y="435" text-anchor="middle" fill="#cfcfcf" font-size="11">operational, kept across rebuilds: my_list · app_account · app_session</text>
       </svg>
-      <div class="cap">Figure 2. Star schema: two fact tables surrounded by conformed dimensions, plus a genre bridge.</div>
+      <div class="cap">Figure 3. Two fact tables surrounded by conformed dimensions, plus a genre bridge and the episodes of each series.</div>
     </div>
 
+    <h3>External source: TMDB</h3>
+    <p><code>data_engineering/tmdb.py</code> treats TMDB as an optional source system. With a free API key
+    it matches each title by name, year and type (within a year, so a made-up title never borrows another
+    film's poster), downloads posters, banners, title logos and episode stills into <code>data/tmdb/</code>
+    with a manifest, and copies episode names and synopses into <code>dim_episode</code>. The ETL re-applies
+    them on every rebuild, and the app serves everything locally afterwards.</p>
+
     <h3>Analytics layer</h3>
-    <p>Dimensional aggregations power the in-app dashboard: top titles by watch-hours, watch-hours &amp;
+    <p>Dimensional aggregations power the in-app dashboard: top titles by watch-hours, watch-hours and
     completion by genre, by device, daily active profiles over the date dimension, rating distribution,
     and the movie/series split.</p>
     <div class="kpis">
       <div class="kpi"><div class="v">61</div><div class="l">catalog titles</div></div>
-      <div class="kpi"><div class="v">17</div><div class="l">genres</div></div>
+      <div class="kpi"><div class="v">855</div><div class="l">episodes</div></div>
       <div class="kpi"><div class="v">558</div><div class="l">profiles</div></div>
-      <div class="kpi"><div class="v">~11k</div><div class="l">watch events</div></div>
+      <div class="kpi"><div class="v">~40k</div><div class="l">watch events</div></div>
       <div class="kpi"><div class="v">~4.3k</div><div class="l">ratings</div></div>
-      <div class="kpi"><div class="v">13/13</div><div class="l">DQ checks pass</div></div>
+      <div class="kpi"><div class="v">21/21</div><div class="l">DQ checks pass</div></div>
     </div>
+  </section>
+
+  <!-- LAKEHOUSE -->
+  <section id="lakehouse">
+    <h2><span class="num">06</span>Lakehouse</h2>
+    <p>Beside the serving warehouse sits a lakehouse: Parquet files in three layers, built and queried
+    with DuckDB. Live events reach it straight from the event stream, through its own consumer group, so
+    the warehouse and the lake read the same topics independently. A run takes about half a second.</p>
+    <div class="figure">
+      <svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+        <defs><marker id="a5" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker></defs>
+        <rect x="15" y="40" width="160" height="56" rx="8" fill="#141418" stroke="#ffb14a"/>
+        <text x="95" y="64" text-anchor="middle" fill="#fff">event stream</text>
+        <text x="95" y="82" text-anchor="middle" fill="#a0a0a8" font-size="11">group: lake-sink</text>
+        <rect x="15" y="150" width="160" height="56" rx="8" fill="#141418" stroke="#c98bff"/>
+        <text x="95" y="174" text-anchor="middle" fill="#fff">warehouse history</text>
+        <text x="95" y="192" text-anchor="middle" fill="#a0a0a8" font-size="11">origin = generated</text>
+        <line x1="175" y1="68" x2="228" y2="112" stroke="#7a7a86" marker-end="url(#a5)"/>
+        <line x1="175" y1="178" x2="228" y2="138" stroke="#7a7a86" marker-end="url(#a5)"/>
+
+        <rect x="230" y="70" width="180" height="110" rx="8" fill="#1f1610" stroke="#b0703a"/>
+        <text x="320" y="94" text-anchor="middle" fill="#fff" font-weight="700">Bronze</text>
+        <text x="320" y="114" text-anchor="middle" fill="#cfcfcf" font-size="11">raw JSON + topic/partition/offset</text>
+        <text x="320" y="130" text-anchor="middle" fill="#cfcfcf" font-size="11">one batch file per run</text>
+        <text x="320" y="146" text-anchor="middle" fill="#cfcfcf" font-size="11">ingest_date partitions</text>
+        <text x="320" y="162" text-anchor="middle" fill="#cfcfcf" font-size="11">offsets committed after write</text>
+
+        <line x1="410" y1="125" x2="458" y2="125" stroke="#7a7a86" marker-end="url(#a5)"/>
+        <rect x="460" y="70" width="190" height="110" rx="8" fill="#18191c" stroke="#a8adb7"/>
+        <text x="555" y="94" text-anchor="middle" fill="#fff" font-weight="700">Silver</text>
+        <text x="555" y="114" text-anchor="middle" fill="#cfcfcf" font-size="11">parse · union · dedupe</text>
+        <text x="555" y="130" text-anchor="middle" fill="#cfcfcf" font-size="11">check against dimensions</text>
+        <text x="555" y="146" text-anchor="middle" fill="#cfcfcf" font-size="11">conform (joins) · month partitions</text>
+        <text x="555" y="162" text-anchor="middle" fill="#cfcfcf" font-size="11">bad rows -> quarantine + reason</text>
+
+        <line x1="650" y1="125" x2="698" y2="125" stroke="#7a7a86" marker-end="url(#a5)"/>
+        <rect x="700" y="60" width="185" height="130" rx="8" fill="#1e1a0e" stroke="#d6ad2e"/>
+        <text x="792" y="84" text-anchor="middle" fill="#fff" font-weight="700">Gold</text>
+        <text x="792" y="104" text-anchor="middle" fill="#cfcfcf" font-size="11">daily engagement</text>
+        <text x="792" y="120" text-anchor="middle" fill="#cfcfcf" font-size="11">title performance (views)</text>
+        <text x="792" y="136" text-anchor="middle" fill="#cfcfcf" font-size="11">genre weekly share</text>
+        <text x="792" y="152" text-anchor="middle" fill="#cfcfcf" font-size="11">binge sessions · by series</text>
+        <text x="792" y="168" text-anchor="middle" fill="#cfcfcf" font-size="11">cohort retention · devices</text>
+        <text x="555" y="230" text-anchor="middle" fill="#a0a0a8" font-size="11">all Parquet under data/lake/, read and written with DuckDB SQL</text>
+      </svg>
+      <div class="cap">Figure 4. Bronze keeps what arrived, silver makes it trustworthy, gold answers business questions.</div>
+    </div>
+    <ul>
+      <li><b>Bronze</b> copies the warehouse's generated history once (and again only if its fingerprint
+      changes) and drains new stream records each run. Offsets are committed only after the batch file is
+      written, so a crash means re-reading a batch, never losing one.</li>
+      <li><b>Silver</b> drops duplicates (a re-delivered batch is in bronze twice but in silver once),
+      checks every row against the dimension snapshots, and sends failures to a quarantine table with the
+      reason, such as <code>series event without an episode</code> from before episodes existed.</li>
+      <li><b>Gold</b> includes a sessionisation query: window functions find where a viewer's next episode
+      started more than 30 minutes after the previous one ended, which splits binges into sessions.</li>
+      <li>Because bronze keeps every streamed event, the lake still has live activity after the
+      warehouse has been rebuilt.</li>
+    </ul>
   </section>
 
   <!-- AI / ML -->
   <section id="ai">
-    <h2><span class="num">05</span>AI / ML</h2>
+    <h2><span class="num">07</span>AI / ML</h2>
     <p>The recommendation service trains real models on startup from the warehouse and exposes the
-    rails the home page uses. All models are classical ML (scikit-learn) - no external LLM calls.</p>
+    rails the home page uses. All models are classical ML (scikit-learn and numpy); there are no external LLM calls.</p>
 
     <div class="grid2">
       <div class="card">
         <h4>Content-based <span class="tag">TF-IDF</span></h4>
         <p>Each title becomes a TF-IDF vector over its metadata blob (genres ×3, keywords ×2, cast,
         director, description, decade). Cosine similarity drives "More Like This" and a per-profile
-        taste vector. Matrix: ~61 × 3.3k features.</p>
+        taste vector.</p>
       </div>
       <div class="card">
         <h4>Collaborative filtering <span class="tag">SVD</span> <span class="tag">item-item</span> <span class="tag">ALS</span></h4>
-        <p>From the implicit-feedback matrix (profiles × titles, valued by an engineered affinity score):
-        Truncated SVD with 24 latent factors predicts affinity for unseen titles; item-item cosine gives
-        "people who watched A also watched B". A pure-numpy implicit ALS (Hu-Koren) is also implemented
-        and benchmarked against the others.</p>
+        <p>From the implicit-feedback matrix (profiles × titles, valued by an engineered affinity score in
+        film-sized units: six episodes weigh like one film): truncated SVD predicts affinity, item-item
+        cosine gives "people who watched A also watched B", and implicit ALS (Hu-Koren) feeds the ranker.</p>
       </div>
       <div class="card">
         <h4>Semantic search <span class="tag">NL intent</span></h4>
@@ -326,71 +451,91 @@
       </div>
     </div>
 
-    <h3>Hybrid ranker</h3>
-    <p>The personalised list blends four normalised signals, with a cold-start fallback to trending and
-    per-profile kids/maturity filtering:</p>
-    <div class="formula">final_score = 0.40 · content-based<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.30 · item-item collaborative ("co-viewed")<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.20 · matrix-factorization (SVD)<br>
-            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.10 · global popularity prior</div>
+    <h3>Two-stage ranking</h3>
+    <p>Top Picks come from two stages. A hybrid blend of four normalised signals shortlists 40 candidates
+    (with a cold-start fallback to trending and kids/maturity filtering):</p>
+    <div class="formula">hybrid = 0.40 · content-based<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.30 · item-item collaborative ("co-viewed")<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.20 · matrix-factorization (SVD)<br>
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;+ 0.10 · popularity (viewers + views)</div>
+    <p>A trained ranker then orders the shortlist. It is pairwise (the RankNet idea with a linear scorer):
+    each profile's latest titles are held out, the base models are refitted on the history before them,
+    and the ranker learns weights that score watched titles above unwatched ones from the same profile.
+    Its features are the model scores plus how the profile's genre taste compares with the catalog and
+    with other viewers, the films-vs-series habit, title age and IMDb score. Gradient-boosted trees were
+    tried first and overfit on this data.</p>
 
     <div class="figure">
-      <svg viewBox="0 0 880 250" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+      <svg viewBox="0 0 900 230" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
         <defs>
           <marker id="a2" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker>
         </defs>
-        <rect x="30" y="20" width="190" height="40" rx="6" fill="#141418" stroke="#46d369"/>
-        <text x="125" y="45" text-anchor="middle" fill="#fff">profile watch history</text>
+        <rect x="15" y="20" width="175" height="40" rx="6" fill="#141418" stroke="#46d369"/>
+        <text x="102" y="45" text-anchor="middle" fill="#fff">profile history</text>
+        <rect x="15" y="72" width="175" height="30" rx="6" fill="#101015" stroke="#3a3a44"/>
+        <text x="102" y="92" text-anchor="middle" fill="#cfcfcf">content · co-viewed</text>
+        <rect x="15" y="110" width="175" height="30" rx="6" fill="#101015" stroke="#3a3a44"/>
+        <text x="102" y="130" text-anchor="middle" fill="#cfcfcf">SVD · ALS</text>
+        <rect x="15" y="148" width="175" height="30" rx="6" fill="#101015" stroke="#3a3a44"/>
+        <text x="102" y="168" text-anchor="middle" fill="#cfcfcf">popularity</text>
+        <rect x="15" y="186" width="175" height="30" rx="6" fill="#101015" stroke="#3a3a44"/>
+        <text x="102" y="206" text-anchor="middle" fill="#cfcfcf">taste vs catalog · habits</text>
 
-        <rect x="30" y="80" width="190" height="34" rx="6" fill="#101015" stroke="#3a3a44"/>
-        <text x="125" y="102" text-anchor="middle" fill="#cfcfcf">content vector (0.40)</text>
-        <rect x="30" y="122" width="190" height="34" rx="6" fill="#101015" stroke="#3a3a44"/>
-        <text x="125" y="144" text-anchor="middle" fill="#cfcfcf">co-viewed items (0.30)</text>
-        <rect x="30" y="164" width="190" height="34" rx="6" fill="#101015" stroke="#3a3a44"/>
-        <text x="125" y="186" text-anchor="middle" fill="#cfcfcf">SVD prediction (0.20)</text>
-        <rect x="30" y="206" width="190" height="34" rx="6" fill="#101015" stroke="#3a3a44"/>
-        <text x="125" y="228" text-anchor="middle" fill="#cfcfcf">popularity (0.10)</text>
+        <line x1="190" y1="118" x2="248" y2="118" stroke="#7a7a86" marker-end="url(#a2)"/>
+        <rect x="250" y="83" width="170" height="70" rx="8" fill="#1a1a22" stroke="#5aa9ff"/>
+        <text x="335" y="110" text-anchor="middle" fill="#fff" font-weight="700">hybrid shortlist</text>
+        <text x="335" y="130" text-anchor="middle" fill="#a0a0a8" font-size="11">top 40 unwatched, allowed</text>
 
-        <line x1="220" y1="139" x2="360" y2="139" stroke="#7a7a86" marker-end="url(#a2)"/>
-        <rect x="362" y="105" width="190" height="70" rx="8" fill="#1a1a22" stroke="#e50914"/>
-        <text x="457" y="133" text-anchor="middle" fill="#fff" font-weight="700">weighted blend</text>
-        <text x="457" y="153" text-anchor="middle" fill="#a0a0a8" font-size="11">min-max normalise · exclude watched</text>
+        <line x1="420" y1="118" x2="478" y2="118" stroke="#7a7a86" marker-end="url(#a2)"/>
+        <rect x="480" y="83" width="170" height="70" rx="8" fill="#1a1a22" stroke="#e50914"/>
+        <text x="565" y="110" text-anchor="middle" fill="#fff" font-weight="700">learned ranker</text>
+        <text x="565" y="130" text-anchor="middle" fill="#a0a0a8" font-size="11">pairwise · linear weights</text>
 
-        <line x1="552" y1="140" x2="660" y2="140" stroke="#7a7a86" marker-end="url(#a2)"/>
-        <rect x="662" y="105" width="190" height="70" rx="8" fill="#141418" stroke="#46d369"/>
-        <text x="757" y="133" text-anchor="middle" fill="#fff" font-weight="700">Top Picks for You</text>
-        <text x="757" y="153" text-anchor="middle" fill="#a0a0a8" font-size="11">+ kids/maturity filter</text>
+        <line x1="650" y1="118" x2="708" y2="118" stroke="#7a7a86" marker-end="url(#a2)"/>
+        <rect x="710" y="83" width="175" height="70" rx="8" fill="#141418" stroke="#46d369"/>
+        <text x="797" y="110" text-anchor="middle" fill="#fff" font-weight="700">Top Picks for You</text>
+        <text x="797" y="130" text-anchor="middle" fill="#a0a0a8" font-size="11">MMR diversity re-rank</text>
       </svg>
-      <div class="cap">Figure 3. Hybrid recommendation pipeline. Cold start (no history) falls back to trending.</div>
+      <div class="cap">Figure 5. The hybrid finds candidates; the trained ranker orders them; MMR keeps the row varied.</div>
     </div>
 
-    <h3>Diversity re-ranking</h3>
-    <p>Top Picks are re-ranked with <b>MMR</b> (maximal marginal relevance): each pick trades relevance
-    against content-similarity to the already-chosen titles, so the rail is not dominated by one genre.</p>
-
     <h3>Offline evaluation</h3>
-    <p>There is an offline eval for the recommender (<code>ai/evaluation.py</code>). A leakage-free
-    per-profile holdout retrains every model on the train split only, ranks the held-out items, and scores
-    each with Precision@K, Recall@K, NDCG@K, MAP@K, hit-rate and catalog coverage. On the same split the
-    <b>hybrid wins</b> (NDCG@10 ≈ 0.26, ahead of item-item, content, popularity, SVD and ALS); popularity
-    has the lowest coverage. A grid search can tune the blend weights. Exposed at <code>GET /api/eval</code>
-    and <code>python -m ai.evaluation</code>.</p>
+    <p>A leakage-free per-profile holdout retrains every model on the train split only, ranks the held-out
+    titles, and scores each with Precision@K, Recall@K, NDCG@K, MAP@K, hit rate and catalog coverage
+    (<code>ai/evaluation.py</code>, <code>GET /api/eval</code>, the Analytics page). On a freshly built
+    warehouse, at K = 10:</p>
+    <table>
+      <tr><th>Model</th><th>NDCG</th><th>Precision</th><th>Recall</th><th>Hit rate</th><th>Coverage</th></tr>
+      <tr><td>hybrid</td><td>0.263</td><td>0.120</td><td>0.363</td><td>0.686</td><td>0.934</td></tr>
+      <tr><td>ranker</td><td>0.258</td><td>0.116</td><td>0.350</td><td>0.676</td><td>0.984</td></tr>
+      <tr><td>item-item</td><td>0.243</td><td>0.111</td><td>0.334</td><td>0.649</td><td>0.869</td></tr>
+      <tr><td>SVD</td><td>0.220</td><td>0.098</td><td>0.298</td><td>0.604</td><td>1.000</td></tr>
+      <tr><td>content</td><td>0.216</td><td>0.103</td><td>0.306</td><td>0.652</td><td>0.951</td></tr>
+      <tr><td>popularity</td><td>0.211</td><td>0.100</td><td>0.300</td><td>0.642</td><td>0.410</td></tr>
+      <tr><td>ALS</td><td>0.196</td><td>0.094</td><td>0.274</td><td>0.572</td><td>1.000</td></tr>
+    </table>
+    <p>The ranker comes out level with the hand-designed hybrid: on the same 558 profiles the NDCG@10
+    difference is -0.005, with a 95% interval of -0.017 to +0.007 (paired bootstrap); it ranks better for
+    30% of profiles and worse for 35%. It learned that blend from data rather than having it picked, and it
+    reaches more of the catalog. Both beat every single model. <code>USE_RANKER</code> in
+    <code>recommender.py</code> switches Top Picks back to the hybrid alone.</p>
 
     <h3>Live feedback loop</h3>
-    <p>Watching or rating updates the in-memory profile state immediately, so "Top Picks" and "Because
-    you watched" re-rank without a full retrain. <code>POST /api/admin/refresh</code> retrains every model
-    from the current warehouse.</p>
+    <p>Watching or rating updates the in-memory profile state immediately (the ranker reads it too), so
+    "Top Picks" and "Because you watched" re-rank without a full retrain. <code>POST /api/admin/refresh</code>
+    retrains every model, the ranker included, from the current warehouse.</p>
   </section>
 
   <!-- STREAMING -->
   <section id="streaming">
-    <h2><span class="num">06</span>Event streaming</h2>
+    <h2><span class="num">08</span>Event streaming</h2>
     <p>Watch and rating actions are not written to the database directly. The API <i>produces</i> them to a
-    log; a background <i>consumer</i> reads the log, maintains a time-windowed live trending tally, and
-    <i>sinks</i> each event into the warehouse while updating the live recommender state.</p>
+    log. One consumer group (<code>warehouse-sink</code>) maintains a time-windowed live trending tally and
+    <i>sinks</i> each event into the warehouse while updating the live recommender state; a second
+    (<code>lake-sink</code>) lands the same events in the lakehouse's bronze layer, at its own pace.</p>
 
     <div class="figure">
-      <svg viewBox="0 0 900 220" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+      <svg viewBox="0 0 900 240" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
         <defs>
           <marker id="a3" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker>
         </defs>
@@ -410,16 +555,17 @@
         <text x="507" y="116" text-anchor="middle" fill="#a0a0a8" font-size="11">ratings (2p)</text>
         <text x="507" y="136" text-anchor="middle" fill="#a0a0a8" font-size="11">partitions · offsets</text>
 
-        <line x1="582" y1="108" x2="650" y2="108" stroke="#7a7a86" marker-end="url(#a3)"/>
-        <rect x="652" y="80" width="150" height="56" rx="8" fill="#141418" stroke="#46d369"/>
-        <text x="727" y="102" text-anchor="middle" fill="#fff">Consumer</text>
-        <text x="727" y="120" text-anchor="middle" fill="#a0a0a8" font-size="11">group: warehouse-sink</text>
+        <line x1="582" y1="90" x2="650" y2="60" stroke="#7a7a86" marker-end="url(#a3)"/>
+        <rect x="652" y="30" width="220" height="56" rx="8" fill="#141418" stroke="#46d369"/>
+        <text x="762" y="52" text-anchor="middle" fill="#fff">group: warehouse-sink</text>
+        <text x="762" y="70" text-anchor="middle" fill="#a0a0a8" font-size="11">warehouse · recommender · trending</text>
 
-        <line x1="727" y1="136" x2="727" y2="180" stroke="#7a7a86" marker-end="url(#a3)"/>
-        <rect x="600" y="182" width="260" height="32" rx="6" fill="#101015" stroke="#3a3a44"/>
-        <text x="730" y="203" text-anchor="middle" fill="#cfcfcf" font-size="11">warehouse sink · recommender update · live trending</text>
+        <line x1="582" y1="128" x2="650" y2="158" stroke="#7a7a86" marker-end="url(#a3)"/>
+        <rect x="652" y="130" width="220" height="56" rx="8" fill="#141418" stroke="#d6ad2e"/>
+        <text x="762" y="152" text-anchor="middle" fill="#fff">group: lake-sink</text>
+        <text x="762" y="170" text-anchor="middle" fill="#a0a0a8" font-size="11">lakehouse bronze (batch per run)</text>
       </svg>
-      <div class="cap">Figure 4. Event flow. The same pipeline runs on the in-process log broker or a real Kafka broker.</div>
+      <div class="cap">Figure 6. One log, two independent consumer groups. The same pipeline runs on the in-process log broker or a real Kafka broker.</div>
     </div>
 
     <h3>Two interchangeable backends</h3>
@@ -428,7 +574,8 @@
     <ul>
       <li><b>In-process log broker</b> (default) - pure Python, no install. Topics are partitioned,
       append-only logs persisted to <code>.log</code> files (replayable across restarts); consumer groups
-      commit offsets independently. This models Kafka's concepts offline.</li>
+      commit offsets independently, and two processes sharing the offsets file never move each other's
+      offsets backwards.</li>
       <li><b>Apache Kafka</b> - set <code>KAFKA_BOOTSTRAP</code> (or run <code>python run.py --kafka</code>)
       with the provided single-node Kafka in Docker (KRaft, no Zookeeper). On startup the app probes the
       broker; if reachable it uses Kafka and creates the topics, otherwise it falls back to the log broker
@@ -438,14 +585,15 @@
 
   <!-- VIDEO -->
   <section id="video">
-    <h2><span class="num">07</span>Video streaming</h2>
+    <h2><span class="num">09</span>Video streaming</h2>
     <p>Playback is adaptive HLS, the approach real streaming services use. Each film is cut into 4-second
     segments at up to three qualities, and the player picks the quality segment by segment based on
-    measured bandwidth. The catalog titles are copyrighted, so every title plays one of three openly
-    licensed Blender films (Big Buck Bunny, Elephants Dream, Tears of Steel), credited on screen.</p>
+    measured bandwidth. The catalog titles are copyrighted, so every title, and every episode of a series,
+    plays one of three openly licensed Blender films (Big Buck Bunny, Elephants Dream, Tears of Steel),
+    credited on screen. Consecutive episodes play different films.</p>
 
     <div class="figure">
-      <svg viewBox="0 0 900 230" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
+      <svg viewBox="0 0 900 260" xmlns="http://www.w3.org/2000/svg" font-family="Segoe UI, Arial" font-size="12">
         <defs>
           <marker id="a4" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L8,3 L0,6 Z" fill="#7a7a86"/></marker>
         </defs>
@@ -454,10 +602,15 @@
         <text x="90" y="126" text-anchor="middle" fill="#a0a0a8" font-size="11">download.blender.org</text>
 
         <line x1="160" y1="113" x2="222" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
-        <rect x="224" y="78" width="150" height="70" rx="8" fill="#1a1a22" stroke="#ffb14a"/>
-        <text x="299" y="104" text-anchor="middle" fill="#fff" font-weight="700">media.ingest</text>
-        <text x="299" y="122" text-anchor="middle" fill="#a0a0a8" font-size="11">ffmpeg, one pass,</text>
-        <text x="299" y="137" text-anchor="middle" fill="#a0a0a8" font-size="11">aligned keyframes</text>
+        <rect x="224" y="40" width="150" height="70" rx="8" fill="#1a1a22" stroke="#ffb14a"/>
+        <text x="299" y="66" text-anchor="middle" fill="#fff" font-weight="700">media.ingest</text>
+        <text x="299" y="84" text-anchor="middle" fill="#a0a0a8" font-size="11">ffmpeg, one pass,</text>
+        <text x="299" y="99" text-anchor="middle" fill="#a0a0a8" font-size="11">aligned keyframes</text>
+        <rect x="224" y="124" width="150" height="86" rx="8" fill="#1a1a22" stroke="#ffb14a"/>
+        <text x="299" y="148" text-anchor="middle" fill="#fff" font-weight="700">media.extras</text>
+        <text x="299" y="166" text-anchor="middle" fill="#a0a0a8" font-size="11">preview sprites + VTT</text>
+        <text x="299" y="181" text-anchor="middle" fill="#a0a0a8" font-size="11">stills · subtitles (SRT->VTT)</text>
+        <text x="299" y="196" text-anchor="middle" fill="#a0a0a8" font-size="11">intro / credits marks</text>
 
         <line x1="374" y1="113" x2="436" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
         <rect x="438" y="30" width="170" height="166" rx="8" fill="#141418" stroke="#46d369"/>
@@ -471,74 +624,94 @@
         <text x="523" y="190" text-anchor="middle" fill="#a0a0a8" font-size="11">4 s .ts segments each</text>
 
         <line x1="608" y1="113" x2="670" y2="113" stroke="#7a7a86" marker-end="url(#a4)"/>
-        <rect x="672" y="78" width="200" height="70" rx="8" fill="#1a1a22" stroke="#e50914"/>
-        <text x="772" y="104" text-anchor="middle" fill="#fff" font-weight="700">player.js + hls.js</text>
-        <text x="772" y="122" text-anchor="middle" fill="#a0a0a8" font-size="11">bandwidth-based switching,</text>
-        <text x="772" y="137" text-anchor="middle" fill="#a0a0a8" font-size="11">resume, watch-time events</text>
+        <rect x="672" y="60" width="210" height="106" rx="8" fill="#1a1a22" stroke="#e50914"/>
+        <text x="777" y="84" text-anchor="middle" fill="#fff" font-weight="700">player.js + hls.js</text>
+        <text x="777" y="104" text-anchor="middle" fill="#a0a0a8" font-size="11">bandwidth-based switching</text>
+        <text x="777" y="120" text-anchor="middle" fill="#a0a0a8" font-size="11">preview frames · subtitles</text>
+        <text x="777" y="136" text-anchor="middle" fill="#a0a0a8" font-size="11">Skip Intro · Next Episode</text>
+        <text x="777" y="152" text-anchor="middle" fill="#a0a0a8" font-size="11">resume · watch-time events</text>
       </svg>
-      <div class="cap">Figure 5. Each film becomes a quality ladder the player switches between as bandwidth changes.</div>
+      <div class="cap">Figure 7. Each film becomes a quality ladder plus the extras the player uses.</div>
     </div>
 
     <ul>
       <li><b>Ingest</b> (<code>python -m media.ingest</code>) downloads each film, then ffmpeg encodes every
       quality in one pass. A keyframe is forced at each segment boundary so all qualities line up and
-      switching never glitches. A film only gets the qualities that fit its own resolution. If a
-      download fails, a generated test-pattern clip is used instead, so the pipeline also works offline.</li>
-      <li><b>Serving</b>: <code>/api/play/{id}</code> maps the title to a film and returns the master
-      playlist URL, the duration, and a resume point (the same started-but-unfinished rule as Continue
-      Watching). The playlists and segments are static files under <code>/media/</code>.</li>
-      <li><b>Playback</b>: hls.js (vendored, so it works offline) feeds the segments to the browser's
-      <code>&lt;video&gt;</code>; Safari uses its native HLS support. The player counts real seconds
-      watched (seeks excluded) and posts them as a watch event, so the recommender and Continue
-      Watching react to actual viewing. With no ingested video it falls back to simulated playback.</li>
+      switching never glitches. If a download fails, a generated test-pattern clip is used instead.</li>
+      <li><b>Extras</b> (<code>python -m media.extras</code>, also run by ingest): seek-bar preview sprites
+      with a WebVTT index, made in seconds by decoding keyframes only; a set of stills for episode
+      thumbnails (near-black fade frames are measured and dropped); Tears of Steel's official subtitles in
+      nine languages, converted from SRT to WebVTT; and each film's opening-titles and end-credits times,
+      read off frame grabs.</li>
+      <li><b>Serving</b>: <code>/api/play/{id}</code> picks the episode for a series (the one asked for, or
+      the one in progress, the next one, or the first), and returns the master playlist URL, duration,
+      resume point, subtitles, preview index, intro/credits marks and the next episode. Everything else is
+      static files under <code>/media/</code>.</li>
+      <li><b>Playback</b>: hls.js (vendored) feeds the segments to the browser's <code>&lt;video&gt;</code>
+      behind custom controls. Subtitles are parsed by the browser and drawn by the player so they sit
+      above the controls. Skip Intro shows during the opening titles; from the end credits a Next Episode
+      countdown plays the next one by itself, and reaching the credits counts as finishing. The player
+      reports real seconds watched (seeks excluded). With no converted video, the same controls drive a
+      fast-forward simulation.</li>
     </ul>
   </section>
 
   <!-- API -->
   <section id="api">
-    <h2><span class="num">08</span>API reference</h2>
+    <h2><span class="num">10</span>API reference</h2>
+    <p class="muted">All <code>/api</code> calls need a signed-in session except the sign-in calls and the
+    images; calls that name a <code>profile_id</code> must name one of the account's profiles.</p>
     <table>
       <tr><th>Method</th><th>Path</th><th>Purpose</th></tr>
-      <tr><td>GET</td><td><code>/api/profiles</code></td><td>selectable demo profiles</td></tr>
+      <tr><td>POST</td><td><code>/api/auth/signup</code> · <code>/login</code> · <code>/logout</code></td><td>accounts and sessions</td></tr>
+      <tr><td>GET</td><td><code>/api/auth/me</code></td><td>who's signed in, and their profiles</td></tr>
+      <tr><td>GET/POST</td><td><code>/api/profiles</code></td><td>list or add profiles</td></tr>
       <tr><td>GET</td><td><code>/api/home?profile_id=</code></td><td>personalised home rails</td></tr>
-      <tr><td>GET</td><td><code>/api/title/{id}?profile_id=</code></td><td>detail, stats, more-like-this</td></tr>
+      <tr><td>GET</td><td><code>/api/title/{id}?profile_id=</code></td><td>detail, stats, more-like-this; seasons and up-next for a series</td></tr>
       <tr><td>GET</td><td><code>/api/catalog?type=movie|series</code></td><td>full catalog (popularity-ranked)</td></tr>
       <tr><td>GET</td><td><code>/api/genre/{name}</code></td><td>titles in a genre</td></tr>
-      <tr><td>GET</td><td><code>/api/recommendations?profile_id=</code></td><td>hybrid personalised list</td></tr>
+      <tr><td>GET</td><td><code>/api/recommendations?profile_id=</code></td><td>personalised list (hybrid + ranker)</td></tr>
       <tr><td>GET</td><td><code>/api/search?q=</code></td><td>semantic search</td></tr>
       <tr><td>POST</td><td><code>/api/assistant</code></td><td>AI concierge (<code>{profile_id, query}</code>)</td></tr>
-      <tr><td>POST</td><td><code>/api/watch</code></td><td>publish a watch event</td></tr>
+      <tr><td>POST</td><td><code>/api/watch</code></td><td>publish a watch event (<code>episode_id</code> for a series)</td></tr>
       <tr><td>POST</td><td><code>/api/rate</code></td><td>publish a rating (1-5)</td></tr>
       <tr><td>GET/POST</td><td><code>/api/mylist</code> · <code>/add</code> · <code>/remove</code></td><td>My List</td></tr>
+      <tr><td>GET</td><td><code>/api/play/{id}?profile_id=&amp;episode_id=</code></td><td>stream, resume point, subtitles, previews, intro/credits, next episode</td></tr>
       <tr><td>GET</td><td><code>/api/analytics</code></td><td>dashboard payload</td></tr>
-      <tr><td>GET</td><td><code>/api/eval</code></td><td>offline recommender metrics (<code>?grid=true</code> tunes weights)</td></tr>
-      <tr><td>GET</td><td><code>/api/streaming/stats</code></td><td>broker/topic/consumer metrics</td></tr>
-      <tr><td>GET</td><td><code>/api/streaming/trending</code></td><td>live trending from the stream</td></tr>
-      <tr><td>GET</td><td><code>/api/poster/{id}</code></td><td>procedural SVG poster</td></tr>
-      <tr><td>GET</td><td><code>/api/play/{id}?profile_id=</code></td><td>stream URL, duration, resume point</td></tr>
-      <tr><td>GET</td><td><code>/media/{film}/master.m3u8</code></td><td>HLS playlists and segments</td></tr>
+      <tr><td>GET</td><td><code>/api/streaming/stats</code> · <code>/trending</code></td><td>broker metrics, live trending</td></tr>
+      <tr><td>GET/POST</td><td><code>/api/lakehouse</code> · <code>/api/lakehouse/run</code></td><td>lakehouse layers and gold tables; run it now</td></tr>
+      <tr><td>GET</td><td><code>/api/eval</code></td><td>offline metrics (<code>?grid=true</code> tunes the hybrid, <code>?cached=true</code> returns the last run)</td></tr>
+      <tr><td>GET</td><td><code>/api/poster/{id}</code> · <code>/backdrop</code> · <code>/logo</code> · <code>/api/still/{episode}</code></td><td>images: TMDB art or generated</td></tr>
+      <tr><td>GET</td><td><code>/api/artwork</code></td><td>which art is available</td></tr>
+      <tr><td>GET</td><td><code>/media/{film}/master.m3u8</code></td><td>HLS playlists, segments, previews, subtitles</td></tr>
       <tr><td>POST</td><td><code>/api/admin/refresh</code></td><td>retrain models from the warehouse</td></tr>
     </table>
   </section>
 
   <!-- RUN -->
   <section id="run">
-    <h2><span class="num">09</span>Running it</h2>
+    <h2><span class="num">11</span>Running it</h2>
 <pre><code># optional: install dependencies
 pip install -r requirements.txt
 
 # build the warehouse on first launch, then start the server
 python run.py
-# open http://127.0.0.1:8000
+# open http://127.0.0.1:8000 and sign in with the demo account (README) or sign up
 
 # other commands
-python run.py --rebuild   # force-rebuild the warehouse, then serve
-python run.py --etl       # run the ETL pipeline only
-python -m streaming.pipeline   # standalone streaming demo
+python run.py --rebuild          # force-rebuild the warehouse (accounts are kept), then serve
+python run.py --etl              # run the ETL pipeline only
+python -m lakehouse.build        # bronze -> silver -> gold
+python -m ai.evaluation          # offline recommender metrics
+python -m streaming.pipeline     # standalone streaming demo (throwaway broker)
 
 # real video (one-time, about 645 MB of downloads)
-python -m media.ingest                  # download films, build HLS streams
+python -m media.ingest                  # download films, build HLS streams and extras
 python -m media.ingest --placeholder    # offline: generated test-pattern clips
+python -m media.extras                  # extras for films converted earlier
+
+# real poster art (optional, free TMDB key in .env)
+python -m data_engineering.tmdb
 
 # real Kafka backend (optional)
 docker compose up -d      # single-node Kafka on localhost:9092
@@ -551,7 +724,7 @@ docker compose down</code></pre>
 </div>
 
 <footer>
-  NetClone - local Netflix clone · data warehouse + hybrid recommender + semantic search + event streaming · see <a href="README.md">README.md</a>
+  NetClone - local Netflix clone · warehouse + lakehouse · two-stage recommender · semantic search · event streaming · HLS video · see <a href="README.md">README.md</a>
 </footer>
 </body>
 </html>
