@@ -123,6 +123,11 @@ def run_all_checks(conn: sqlite3.Connection) -> dict:
              + (SELECT COUNT(*) FROM fact_rating WHERE origin NOT IN ('generated', 'app'))""")
     check("fact origin is 'generated' or 'app'", bad_origin == 0, f"violations={bad_origin}")
 
+    orphan_login = _scalar(conn, """
+        SELECT COUNT(*) FROM app_account a LEFT JOIN dim_user u ON a.user_id = u.user_id
+        WHERE u.user_id IS NULL""")
+    check("every login belongs to a user", orphan_login == 0, f"orphans={orphan_login}")
+
     passed = sum(1 for c in checks if c["passed"])
     return {"checks": checks, "passed": passed, "total": len(checks),
             "all_passed": passed == len(checks)}

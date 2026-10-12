@@ -103,6 +103,25 @@ CREATE TABLE IF NOT EXISTS fact_rating (
     origin     TEXT NOT NULL DEFAULT 'generated'
 );
 
+-- Accounts (operational; kept when the warehouse is rebuilt). Each signs in as
+-- one dim_user. People who sign up in the app get ids from 100000, clear of the
+-- generated population, so a rebuild can put their user and profiles back.
+CREATE TABLE IF NOT EXISTS app_account (
+    account_id    INTEGER PRIMARY KEY,
+    email         TEXT NOT NULL UNIQUE COLLATE NOCASE,
+    password_hash TEXT NOT NULL,      -- scrypt$n$r$p$salt$hash
+    user_id       INTEGER NOT NULL,   -- dim_user.user_id (no FK: dim_user is rebuilt)
+    created_ts    TEXT NOT NULL
+);
+
+-- Signed-in sessions. Only a hash of the cookie's token is stored.
+CREATE TABLE IF NOT EXISTS app_session (
+    token_hash TEXT PRIMARY KEY,
+    account_id INTEGER NOT NULL REFERENCES app_account(account_id),
+    created_ts TEXT NOT NULL,
+    expires_ts TEXT NOT NULL
+);
+
 -- Operational table used by the application (user's saved list).
 CREATE TABLE IF NOT EXISTS my_list (
     profile_id INTEGER NOT NULL REFERENCES dim_profile(profile_id),

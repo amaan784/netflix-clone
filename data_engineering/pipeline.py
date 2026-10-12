@@ -15,11 +15,11 @@ from datetime import date, datetime
 from paths import DB_PATH, SCHEMA_PATH, LOG_DIR
 from data_engineering.catalog_seed import CATALOG
 from data_engineering import generate_data
-from data_engineering import data_quality, tmdb
+from data_engineering import accounts, data_quality, tmdb
 
 # Stored in the database (PRAGMA user_version). Bump it whenever schema.sql
 # changes, and existing warehouses get rebuilt on the next start.
-SCHEMA_VERSION = 3
+SCHEMA_VERSION = 4
 
 # log to console and file
 logger = logging.getLogger("etl")
@@ -128,12 +128,14 @@ def transform(users, profiles, affinities):
 def load(data: dict, conn: sqlite3.Connection):
     logger.info("[LOAD] Rebuilding schema at %s", DB_PATH)
     cur = conn.cursor()
+    # people who signed up in the app aren't generated data: keep them
+    kept = accounts.app_people(conn)
 
     # rebuild analytical tables
     for tbl in ["fact_rating", "fact_watch_event", "bridge_title_genre", "dim_episode",
                 "dim_profile", "dim_user", "dim_genre", "dim_date", "dim_title"]:
         cur.execute(f"DROP TABLE IF EXISTS {tbl}")
-    # my_list is preserved across reloads (operational data)
+    # my_list, app_account and app_session are operational data and survive reloads
     conn.commit()
 
     schema = SCHEMA_PATH.read_text(encoding="utf-8")
@@ -177,6 +179,12 @@ def load(data: dict, conn: sqlite3.Connection):
         """INSERT INTO fact_rating (rating_id,profile_id,title_id,date_id,rating,rated_ts)
            VALUES (:rating_id,:profile_id,:title_id,:date_id,:rating,:rated_ts)""",
         data["ratings"])
+
+    restored = accounts.restore_app_people(conn, kept)
+    if restored:
+        logger.info("[LOAD] Kept %d users/profiles created in the app", restored)
+    demo = next(u for u in data["users"] if u["email"] == generate_data.DEMO_EMAIL)
+    accounts.ensure_login(conn, generate_data.DEMO_EMAIL, generate_data.DEMO_PASSWORD, demo["user_id"])
 
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()

@@ -26,7 +26,10 @@ LAST_NAMES = ["Smith", "Garcia", "Kim", "Patel", "Müller", "Silva", "Tanaka",
 
 PROFILE_NAMES = ["Me", "Family", "Kids", "Weekend", "Partner", "Roomie"]
 
-# demo profiles the running app uses (is_synthetic=0), seeded with light history
+# The demo account the app signs into (is_synthetic=0), with four profiles
+# seeded with light history. Its login is made by the ETL; see the README.
+DEMO_EMAIL = "demo@netflixclone.local"
+DEMO_PASSWORD = "netclone-demo"
 DEMO_PROFILES = [
     {"name": "Aman", "is_kids": 0, "age_group": "adult",
      "favs": ["Sci-Fi", "Thriller", "Crime"]},
@@ -95,7 +98,7 @@ def generate_population(n_users: int = 280):
     users.append({
         "user_id": demo_uid,
         "full_name": "Demo Account",
-        "email": "demo@netflixclone.local",
+        "email": DEMO_EMAIL,
         "country": "USA",
         "plan": "Premium",
         "signup_date": "2024-01-01",
